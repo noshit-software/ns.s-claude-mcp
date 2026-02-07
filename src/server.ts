@@ -16,22 +16,23 @@ import {
   deleteContext,
 } from './context.js';
 
-// MCP Server Setup
-const mcpServer = new Server(
-  {
-    name: 'knightsrook-mcp',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      resources: {},
-      tools: {},
+// MCP Server Factory - create a new instance for each connection
+function createMCPServer() {
+  const server = new Server(
+    {
+      name: 'knightsrook-mcp',
+      version: '1.0.0',
     },
-  }
-);
+    {
+      capabilities: {
+        resources: {},
+        tools: {},
+      },
+    }
+  );
 
-// MCP Resources
-mcpServer.setRequestHandler(ListResourcesRequestSchema, async () => {
+  // MCP Resources
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
     resources: [
       {
@@ -44,7 +45,7 @@ mcpServer.setRequestHandler(ListResourcesRequestSchema, async () => {
   };
 });
 
-mcpServer.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const uri = request.params.uri;
 
   if (uri === 'mcp://context') {
@@ -64,7 +65,7 @@ mcpServer.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 });
 
 // MCP Tools
-mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
@@ -128,7 +129,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === 'get_context') {
@@ -191,7 +192,10 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   throw new Error(`Unknown tool: ${name}`);
-});
+  });
+
+  return server;
+}
 
 // Express REST API
 const app = express();
@@ -263,23 +267,24 @@ app.delete('/context/:key', asyncHandler(async (req, res) => {
 }));
 
 // MCP SSE endpoints
-const transportMap = new Map<string, SSEServerTransport>();
+const sessionMap = new Map<string, { transport: SSEServerTransport; server: Server }>();
 
 app.get('/mcp/sse', async (req, res) => {
   console.log('MCP SSE connection from:', req.headers.origin || req.headers.referer || 'unknown');
 
   const transport = new SSEServerTransport('/mcp/message', res);
   const sessionId = transport.sessionId;
+  const server = createMCPServer();
 
   transport.onclose = () => {
-    transportMap.delete(sessionId);
+    sessionMap.delete(sessionId);
     console.log(`MCP session ${sessionId} closed`);
   };
 
-  transportMap.set(sessionId, transport);
+  sessionMap.set(sessionId, { transport, server });
   console.log(`MCP session ${sessionId} established`);
 
-  await mcpServer.connect(transport);
+  await server.connect(transport);
 });
 
 app.post('/mcp/message', express.json(), async (req, res) => {
@@ -290,11 +295,13 @@ app.post('/mcp/message', express.json(), async (req, res) => {
     return;
   }
 
-  const transport = transportMap.get(sessionId);
-  if (!transport) {
+  const session = sessionMap.get(sessionId);
+  if (!session) {
     res.status(404).json({ error: 'Session not found' });
     return;
   }
+
+  const transport = session.transport;
 
   try {
     await transport.handlePostMessage(req, res, req.body);
