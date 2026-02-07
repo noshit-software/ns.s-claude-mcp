@@ -235,7 +235,7 @@ app.get('/context', asyncHandler(async (_req, res) => {
 }));
 
 app.get('/context/:key', asyncHandler(async (req, res) => {
-  const entry = await getContext(req.params.key);
+  const entry = await getContext(String(req.params.key));
   if (!entry) {
     res.status(404).json({ error: 'Context key not found' });
     return;
@@ -254,7 +254,7 @@ app.post('/context', asyncHandler(async (req, res) => {
 }));
 
 app.delete('/context/:key', asyncHandler(async (req, res) => {
-  const deleted = await deleteContext(req.params.key);
+  const deleted = await deleteContext(String(req.params.key));
   if (!deleted) {
     res.status(404).json({ error: 'Context key not found' });
     return;
