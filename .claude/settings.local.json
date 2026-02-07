@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run setup-db:*)",
+      "Bash(npm run setup-root Octanemedia1!)",
+      "Bash(npm run migrate Octanemedia1!)",
+      "Bash(npm run dev:*)"
+    ]
+  }
+}

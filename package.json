@@ -1,0 +1,32 @@
+{
+  "name": "knightsrook-mcp",
+  "version": "1.0.0",
+  "description": "Universal context store MCP server - long-term memory for all Claude instances",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "setup-db": "tsx src/setup-db.ts",
+    "setup-root": "tsx src/setup-root.ts",
+    "migrate": "tsx src/migrate-context.ts"
+  },
+  "keywords": ["mcp", "context", "memory"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.11.5",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
