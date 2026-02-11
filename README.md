@@ -31,10 +31,11 @@ npm run setup-db
 
 4. **Migrate existing context data** (if you have data from Nebula):
 ```bash
-# Export from Nebula database
-mysqldump -u knightsrook_nebula -p knightsrook_nebula context > context_backup.sql
+# Using the migrate script (migrates from local to remote based on .env)
+npm run migrate <root_password>
 
-# Import to MCP database
+# Or manually with mysqldump
+mysqldump -u knightsrook_nebula -p knightsrook_nebula context > context_backup.sql
 mysql -u knightsrook_mcp -p knightsrook_mcp < context_backup.sql
 ```
 

@@ -12,8 +12,10 @@ async function migrateContext() {
     process.exit(1);
   }
 
-  // Connect to source database (knightsrook_nebula)
-  console.log('Connecting to source database (knightsrook_nebula)...');
+  const remoteHost = process.env.DB_HOST || '5.78.186.35';
+
+  // Connect to source database (knightsrook_nebula on localhost)
+  console.log('Connecting to source database (knightsrook_nebula on localhost)...');
   const sourceConnection = await mysql.createConnection({
     host: 'localhost',
     port: 3306,
@@ -22,13 +24,13 @@ async function migrateContext() {
     database: 'knightsrook_nebula',
   });
 
-  // Connect to destination database (knightsrook_mcp)
-  console.log('Connecting to destination database (knightsrook_mcp)...');
+  // Connect to destination database (knightsrook_mcp on remote)
+  console.log(`Connecting to destination database (knightsrook_mcp on ${remoteHost})...`);
   const destConnection = await mysql.createConnection({
-    host: 'localhost',
+    host: remoteHost,
     port: 3306,
-    user: 'root',
-    password: rootPassword,
+    user: process.env.DB_USER || 'knightsrook_mcp',
+    password: process.env.DB_PASSWORD || 'Octanemedia1!',
     database: 'knightsrook_mcp',
   });
 
