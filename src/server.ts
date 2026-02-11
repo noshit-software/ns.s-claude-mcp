@@ -281,14 +281,26 @@ app.get('/mcp/sse', async (req, res) => {
     console.log(`MCP session ${sessionId} closed`);
   };
 
+  transport.onerror = (error) => {
+    console.error(`MCP session ${sessionId} error:`, error);
+  };
+
   sessionMap.set(sessionId, { transport, server });
   console.log(`MCP session ${sessionId} established`);
 
-  await server.connect(transport);
+  try {
+    await server.connect(transport);
+    console.log(`MCP session ${sessionId} connected successfully`);
+  } catch (error) {
+    console.error(`MCP session ${sessionId} connection failed:`, error);
+    sessionMap.delete(sessionId);
+  }
 });
 
 app.post('/mcp/message', express.json(), async (req, res) => {
   const sessionId = req.query.sessionId as string;
+
+  console.log(`Received message for session ${sessionId}`);
 
   if (!sessionId) {
     res.status(400).json({ error: 'SessionId is required' });
@@ -297,6 +309,7 @@ app.post('/mcp/message', express.json(), async (req, res) => {
 
   const session = sessionMap.get(sessionId);
   if (!session) {
+    console.log(`Session ${sessionId} not found in map`);
     res.status(404).json({ error: 'Session not found' });
     return;
   }

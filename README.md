@@ -161,3 +161,17 @@ WantedBy=multi-user.target
 ```
 
 Nebula agents can also connect to this MCP server, but they're in a separate repo and can be developed/restarted without affecting MCP availability.
+
+## Troubleshooting
+
+### Connection Issues
+
+**Sessions establishing but immediately closing:**
+- Check server logs: `pm2 logs mcp`
+- Added detailed logging to track connection lifecycle
+- Each SSE connection creates a new MCP Server instance to avoid "Already connected to a transport" errors
+- Error handlers log connection failures and transport errors
+
+**"Already connected to a transport" error:**
+- Fixed by using factory pattern (`createMCPServer()`) to create isolated Server instance per connection
+- Each session gets its own Server + Transport pair stored in sessionMap
