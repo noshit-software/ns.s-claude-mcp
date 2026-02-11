@@ -18,14 +18,25 @@ async function migrateSchema() {
     await connection.query('DELETE FROM context');
     console.log('✓ Cleared existing data');
 
-    // Add new metadata columns
-    await connection.query(`
-      ALTER TABLE context
-      ADD COLUMN IF NOT EXISTS tags JSON DEFAULT NULL COMMENT 'Searchable keywords array',
-      ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT NULL COMMENT 'Topic area (architecture, design, etc)',
-      ADD COLUMN IF NOT EXISTS project VARCHAR(100) DEFAULT NULL COMMENT 'Associated project name'
-    `);
-    console.log('✓ Added metadata columns (tags, category, project)');
+    // Add new metadata columns (one at a time to handle existing columns gracefully)
+    const columns = [
+      { name: 'tags', def: 'JSON DEFAULT NULL COMMENT \'Searchable keywords array\'' },
+      { name: 'category', def: 'VARCHAR(100) DEFAULT NULL COMMENT \'Topic area (architecture, design, etc)\'' },
+      { name: 'project', def: 'VARCHAR(100) DEFAULT NULL COMMENT \'Associated project name\'' }
+    ];
+
+    for (const col of columns) {
+      try {
+        await connection.query(`ALTER TABLE context ADD COLUMN ${col.name} ${col.def}`);
+        console.log(`✓ Added column: ${col.name}`);
+      } catch (error: any) {
+        if (error.code === 'ER_DUP_FIELDNAME') {
+          console.log(`  Column ${col.name} already exists, skipping`);
+        } else {
+          throw error;
+        }
+      }
+    }
 
     // Add indexes for better search performance
     await connection.query(`

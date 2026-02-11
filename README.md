@@ -162,10 +162,18 @@ Single table schema in `knightsrook_mcp` database:
 CREATE TABLE context (
   `key` VARCHAR(255) PRIMARY KEY,
   value JSON,
+  tags JSON DEFAULT NULL,
+  category VARCHAR(100) DEFAULT NULL,
+  project VARCHAR(100) DEFAULT NULL,
   updated_by VARCHAR(50),
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_category (category),
+  INDEX idx_project (project),
+  INDEX idx_updated_at (updated_at)
 );
 ```
+
+**Migration:** To upgrade from old schema, run `npm run migrate-schema` which adds metadata columns and indexes.
 
 ## Deployment
 
