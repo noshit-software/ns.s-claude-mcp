@@ -220,8 +220,8 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-// MCP endpoint - Stateless Streamable HTTP
-app.post('/mcp', async (req, res) => {
+// MCP endpoint - Stateless Streamable HTTP (handles GET, POST, DELETE)
+app.all('/mcp', async (req, res) => {
   // Create a new transport for each request (stateless)
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode

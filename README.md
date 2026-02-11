@@ -203,4 +203,5 @@ Nebula agents can also connect to this MCP server, but they're in a separate rep
 **Pattern:**
 - Single MCP Server instance with request handlers
 - New StreamableHTTPServerTransport per request (stateless)
+- Handles GET, POST, DELETE requests (required for Streamable HTTP)
 - Proper cleanup with transport.close() after each request
