@@ -117,23 +117,15 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) o
 {
   "mcpServers": {
     "knightsrook-mcp": {
-      "url": "https://mcp.knightsrook.com/mcp"
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.knightsrook.com/mcp"]
     }
   }
 }
 ```
 
 **Claude Code:**
-Add to `.claude/settings.json`:
-```json
-{
-  "mcpServers": {
-    "knightsrook-mcp": {
-      "url": "https://mcp.knightsrook.com/mcp"
-    }
-  }
-}
-```
+Claude Code currently supports remote MCP servers the same way as Claude Desktop. Add to your global MCP configuration or use the connectors UI.
 
 ## Database
 
