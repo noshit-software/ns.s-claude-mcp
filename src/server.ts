@@ -16,23 +16,22 @@ import {
   deleteContext,
 } from './context.js';
 
-// MCP Server Factory - create a new instance for each connection
-function createMCPServer() {
-  const server = new Server(
-    {
-      name: 'knightsrook-mcp',
-      version: '1.0.0',
+// MCP Server Setup (single instance shared across all connections, like Nebula)
+const mcpServer = new Server(
+  {
+    name: 'knightsrook-mcp',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      resources: {},
+      tools: {},
     },
-    {
-      capabilities: {
-        resources: {},
-        tools: {},
-      },
-    }
-  );
+  }
+);
 
-  // MCP Resources
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+// MCP Resources
+mcpServer.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
     resources: [
       {
@@ -45,7 +44,7 @@ function createMCPServer() {
   };
 });
 
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+mcpServer.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const uri = request.params.uri;
 
   if (uri === 'mcp://context') {
@@ -65,7 +64,7 @@ function createMCPServer() {
 });
 
 // MCP Tools
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
+mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
@@ -129,7 +128,7 @@ function createMCPServer() {
   };
 });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === 'get_context') {
@@ -192,10 +191,7 @@ function createMCPServer() {
   }
 
   throw new Error(`Unknown tool: ${name}`);
-  });
-
-  return server;
-}
+});
 
 // Express REST API
 const app = express();
@@ -266,55 +262,39 @@ app.delete('/context/:key', asyncHandler(async (req, res) => {
   res.status(204).send();
 }));
 
-// MCP SSE endpoints
-const sessionMap = new Map<string, { transport: SSEServerTransport; server: Server }>();
+// MCP SSE endpoints (exactly like Nebula)
+const transportMap = new Map<string, SSEServerTransport>();
 
 app.get('/mcp/sse', async (req, res) => {
   console.log('MCP SSE connection from:', req.headers.origin || req.headers.referer || 'unknown');
 
   const transport = new SSEServerTransport('/mcp/message', res);
   const sessionId = transport.sessionId;
-  const server = createMCPServer();
 
   transport.onclose = () => {
-    sessionMap.delete(sessionId);
-    console.log(`MCP session ${sessionId} closed`);
+    transportMap.delete(sessionId);
+    console.log(`MCP transport ${sessionId} closed`);
   };
 
-  transport.onerror = (error) => {
-    console.error(`MCP session ${sessionId} error:`, error);
-  };
+  transportMap.set(sessionId, transport);
+  console.log(`MCP transport ${sessionId} established`);
 
-  sessionMap.set(sessionId, { transport, server });
-  console.log(`MCP session ${sessionId} established`);
-
-  try {
-    await server.connect(transport);
-    console.log(`MCP session ${sessionId} connected successfully`);
-  } catch (error) {
-    console.error(`MCP session ${sessionId} connection failed:`, error);
-    sessionMap.delete(sessionId);
-  }
+  await mcpServer.connect(transport);
 });
 
 app.post('/mcp/message', express.json(), async (req, res) => {
   const sessionId = req.query.sessionId as string;
-
-  console.log(`Received message for session ${sessionId}`);
 
   if (!sessionId) {
     res.status(400).json({ error: 'SessionId is required' });
     return;
   }
 
-  const session = sessionMap.get(sessionId);
-  if (!session) {
-    console.log(`Session ${sessionId} not found in map`);
+  const transport = transportMap.get(sessionId);
+  if (!transport) {
     res.status(404).json({ error: 'Session not found' });
     return;
   }
-
-  const transport = session.transport;
 
   try {
     await transport.handlePostMessage(req, res, req.body);

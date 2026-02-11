@@ -173,6 +173,7 @@ Nebula agents can also connect to this MCP server, but they're in a separate rep
 - Each SSE connection creates a new MCP Server instance to avoid "Already connected to a transport" errors
 - Error handlers log connection failures and transport errors
 
-**"Already connected to a transport" error:**
-- Fixed by using factory pattern (`createMCPServer()`) to create isolated Server instance per connection
-- Each session gets its own Server + Transport pair stored in sessionMap
+**Implementation Pattern:**
+- Uses single mcpServer instance shared across all connections (matches Nebula's proven pattern)
+- Each SSE connection gets its own Transport stored in transportMap
+- MCP SDK handles multiple concurrent connections to the same Server instance
