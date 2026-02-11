@@ -101,9 +101,39 @@ curl -X DELETE http://localhost:3118/context/my-key
 
 ### MCP Connection
 
-MCP endpoint (Streamable HTTP): `http://localhost:3118/mcp`
+MCP endpoint: `https://mcp.knightsrook.com/mcp`
 
-Or via domain: `https://mcp.knightsrook.com/mcp`
+**Claude.ai Web:**
+1. Go to Settings → Connectors → Browse connectors
+2. Add custom connector with URL: `https://mcp.knightsrook.com/mcp`
+
+**Claude Mobile:**
+1. Settings → Connectors
+2. Add custom connector: `https://mcp.knightsrook.com/mcp`
+
+**Claude Desktop:**
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+```json
+{
+  "mcpServers": {
+    "knightsrook-mcp": {
+      "url": "https://mcp.knightsrook.com/mcp"
+    }
+  }
+}
+```
+
+**Claude Code:**
+Add to `.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "knightsrook-mcp": {
+      "url": "https://mcp.knightsrook.com/mcp"
+    }
+  }
+}
+```
 
 ## Database
 
