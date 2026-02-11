@@ -279,7 +279,14 @@ app.get('/mcp/sse', async (req, res) => {
   transportMap.set(sessionId, transport);
   console.log(`MCP transport ${sessionId} established`);
 
-  await mcpServer.connect(transport);
+  try {
+    await mcpServer.connect(transport);
+    console.log(`MCP transport ${sessionId} connected successfully`);
+  } catch (error) {
+    console.error(`Failed to connect transport ${sessionId}:`, error);
+    transportMap.delete(sessionId);
+    throw error;
+  }
 });
 
 app.post('/mcp/message', express.json(), async (req, res) => {

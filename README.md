@@ -169,11 +169,10 @@ Nebula agents can also connect to this MCP server, but they're in a separate rep
 
 **Sessions establishing but immediately closing:**
 - Check server logs: `pm2 logs mcp`
-- Added detailed logging to track connection lifecycle
-- Each SSE connection creates a new MCP Server instance to avoid "Already connected to a transport" errors
-- Error handlers log connection failures and transport errors
+- Added detailed logging and error handling to track connection lifecycle
+- Investigating "Already connected to a transport" errors with multiple simultaneous connections
 
 **Implementation Pattern:**
 - Uses single mcpServer instance shared across all connections (matches Nebula's proven pattern)
 - Each SSE connection gets its own Transport stored in transportMap
-- MCP SDK handles multiple concurrent connections to the same Server instance
+- Added try-catch error handling around mcpServer.connect() calls
