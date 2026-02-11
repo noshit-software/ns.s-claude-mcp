@@ -14,6 +14,7 @@ import {
   getContext,
   setContext,
   deleteContext,
+  searchContext,
 } from './context.js';
 
 // Create MCP Server
@@ -68,60 +69,95 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: 'get_context',
-        description: 'Get a value from the context store',
+        name: 'search_topics',
+        description: 'Search topics by keyword, tags, category, or project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search keyword (searches in keys and values)',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Filter by tags (any tag matches)',
+            },
+            category: {
+              type: 'string',
+              description: 'Filter by category (architecture, design, etc.)',
+            },
+            project: {
+              type: 'string',
+              description: 'Filter by project name',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum results to return (default: 50)',
+            },
+          },
+        },
+      },
+      {
+        name: 'get_topic',
+        description: 'Retrieve a specific topic by key',
         inputSchema: {
           type: 'object',
           properties: {
             key: {
               type: 'string',
-              description: 'Context key',
+              description: 'Topic key',
             },
           },
           required: ['key'],
         },
       },
       {
-        name: 'set_context',
-        description: 'Set a value in the context store',
+        name: 'save_topic',
+        description: 'Save or update a curated knowledge topic with metadata',
         inputSchema: {
           type: 'object',
           properties: {
             key: {
               type: 'string',
-              description: 'Context key',
+              description: 'Unique topic key (e.g., "game-design:roguelike-mechanics")',
             },
             value: {
-              description: 'Value to store (any JSON type)',
+              description: 'Topic content (summary, documentation, etc.)',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Searchable keywords (e.g., ["game-design", "roguelike"])',
+            },
+            category: {
+              type: 'string',
+              description: 'Topic category (e.g., "architecture", "design")',
+            },
+            project: {
+              type: 'string',
+              description: 'Associated project name (e.g., "miskatonic-merge")',
             },
             updated_by: {
               type: 'string',
-              description: 'Who is updating this (optional)',
+              description: 'Who is saving this (optional)',
             },
           },
           required: ['key', 'value'],
         },
       },
       {
-        name: 'delete_context',
-        description: 'Delete a key from the context store',
+        name: 'delete_topic',
+        description: 'Delete a topic from the knowledge base',
         inputSchema: {
           type: 'object',
           properties: {
             key: {
               type: 'string',
-              description: 'Context key to delete',
+              description: 'Topic key to delete',
             },
           },
           required: ['key'],
-        },
-      },
-      {
-        name: 'list_context',
-        description: 'List all context keys with metadata',
-        inputSchema: {
-          type: 'object',
-          properties: {},
         },
       },
     ],
@@ -131,10 +167,39 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  if (name === 'get_context') {
+  if (name === 'search_topics') {
+    const results = await searchContext({
+      query: args!.query as string | undefined,
+      tags: args!.tags as string[] | undefined,
+      category: args!.category as string | undefined,
+      project: args!.project as string | undefined,
+      limit: (args!.limit as number | undefined) || 50,
+    });
+
+    // Return summary without full values for better performance
+    const summary = results.map(e => ({
+      key: e.key,
+      tags: e.tags,
+      category: e.category,
+      project: e.project,
+      updated_at: e.updated_at,
+      updated_by: e.updated_by,
+    }));
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Found ${results.length} topics:\n\n${JSON.stringify(summary, null, 2)}`,
+        },
+      ],
+    };
+  }
+
+  if (name === 'get_topic') {
     const entry = await getContext(args!.key as string);
     if (!entry) {
-      throw new Error(`Context key ${args!.key} not found`);
+      throw new Error(`Topic '${args!.key}' not found`);
     }
     return {
       content: [
@@ -146,45 +211,35 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  if (name === 'set_context') {
+  if (name === 'save_topic') {
     const entry = await setContext({
       key: args!.key as string,
       value: args!.value,
+      tags: args!.tags as string[] | undefined,
+      category: args!.category as string | undefined,
+      project: args!.project as string | undefined,
       updated_by: args!.updated_by as string | undefined,
     });
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(entry, null, 2),
+          text: `Topic '${entry.key}' saved successfully\n\n${JSON.stringify(entry, null, 2)}`,
         },
       ],
     };
   }
 
-  if (name === 'delete_context') {
+  if (name === 'delete_topic') {
     const deleted = await deleteContext(args!.key as string);
     if (!deleted) {
-      throw new Error(`Context key ${args!.key} not found`);
+      throw new Error(`Topic '${args!.key}' not found`);
     }
     return {
       content: [
         {
           type: 'text',
-          text: `Context key '${args!.key}' deleted successfully`,
-        },
-      ],
-    };
-  }
-
-  if (name === 'list_context') {
-    const entries = await getAllContext();
-    const keys = entries.map(e => ({ key: e.key, updated_at: e.updated_at, updated_by: e.updated_by }));
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(keys, null, 2),
+          text: `Topic '${args!.key}' deleted successfully`,
         },
       ],
     };

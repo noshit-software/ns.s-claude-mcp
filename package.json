@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "setup-db": "tsx src/setup-db.ts",
     "setup-root": "tsx src/setup-root.ts",
-    "migrate": "tsx src/migrate-context.ts"
+    "migrate": "tsx src/migrate-context.ts",
+    "migrate-schema": "tsx src/migrate-schema.ts"
   },
   "keywords": ["mcp", "context", "memory"],
   "author": "",

@@ -54,29 +54,56 @@ pm2 start dist/server.js --name knightsrook-mcp
 
 ## Usage
 
+### Curated Knowledge Base
+
+The MCP server maintains a searchable knowledge base with metadata for cross-project pattern discovery.
+
 ### MCP Tools
 
-**get_context**
-```
-key: "my-key"
-```
-
-**set_context**
-```
-key: "my-key"
-value: { any: "json data" }
-updated_by: "optional-identifier"
-```
-
-**delete_context**
-```
-key: "my-key"
+**search_topics** - Find topics by keyword, tags, category, or project
+```json
+{
+  "query": "game-design",           // Optional: search keyword
+  "tags": ["roguelike", "combat"],  // Optional: filter by tags
+  "category": "architecture",       // Optional: filter by category
+  "project": "miskatonic-merge",    // Optional: filter by project
+  "limit": 50                       // Optional: max results (default: 50)
+}
 ```
 
-**list_context**
+**get_topic** - Retrieve a specific topic
+```json
+{
+  "key": "game-design:roguelike-mechanics"
+}
 ```
-(no parameters - returns all keys with metadata)
+
+**save_topic** - Save/update curated knowledge with metadata
+```json
+{
+  "key": "game-design:roguelike-mechanics",
+  "value": "Detailed summary of conversation about roguelike mechanics...",
+  "tags": ["game-design", "roguelike", "procedural-generation"],
+  "category": "design",
+  "project": "miskatonic-merge",
+  "updated_by": "user"
+}
 ```
+
+**delete_topic** - Remove a topic
+```json
+{
+  "key": "game-design:roguelike-mechanics"
+}
+```
+
+### Workflow
+
+1. **During conversation**: When you say "save to MCP", Claude creates a summary
+2. **Review**: You review the summary and metadata (tags, category, project)
+3. **Check for duplicates**: Claude searches for existing related topics
+4. **Save or merge**: If topic exists, merge content; otherwise create new entry
+5. **Cross-project discovery**: Search by tags to find patterns across projects
 
 ### REST API
 
