@@ -173,7 +173,7 @@ CREATE TABLE context (
 );
 ```
 
-**Migration:** To upgrade from old schema, run `npm run migrate-schema` which adds metadata columns and indexes.
+**Migration:** To upgrade from old schema, run `npm run migrate-schema` which adds metadata columns and indexes. Compatible with MySQL 5.7+.
 
 ## Deployment
 

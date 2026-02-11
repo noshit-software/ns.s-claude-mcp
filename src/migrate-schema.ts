@@ -38,17 +38,25 @@ async function migrateSchema() {
       }
     }
 
-    // Add indexes for better search performance
-    await connection.query(`
-      CREATE INDEX IF NOT EXISTS idx_category ON context(category)
-    `);
-    await connection.query(`
-      CREATE INDEX IF NOT EXISTS idx_project ON context(project)
-    `);
-    await connection.query(`
-      CREATE INDEX IF NOT EXISTS idx_updated_at ON context(updated_at)
-    `);
-    console.log('✓ Added indexes for search performance');
+    // Add indexes for better search performance (one at a time to handle existing indexes gracefully)
+    const indexes = [
+      { name: 'idx_category', column: 'category' },
+      { name: 'idx_project', column: 'project' },
+      { name: 'idx_updated_at', column: 'updated_at' }
+    ];
+
+    for (const idx of indexes) {
+      try {
+        await connection.query(`CREATE INDEX ${idx.name} ON context(${idx.column})`);
+        console.log(`✓ Added index: ${idx.name}`);
+      } catch (error: any) {
+        if (error.code === 'ER_DUP_KEYNAME') {
+          console.log(`  Index ${idx.name} already exists, skipping`);
+        } else {
+          throw error;
+        }
+      }
+    }
 
     console.log('\n✅ Migration complete! Schema ready for curated knowledge base.');
   } catch (error) {
