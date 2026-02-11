@@ -1,6 +1,6 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -16,7 +16,7 @@ import {
   deleteContext,
 } from './context.js';
 
-// MCP Server Setup (single instance shared across all connections, like Nebula)
+// Create MCP Server
 const mcpServer = new Server(
   {
     name: 'knightsrook-mcp',
@@ -118,7 +118,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'list_context',
-        description: 'List all context keys',
+        description: 'List all context keys with metadata',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -193,137 +193,113 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error(`Unknown tool: ${name}`);
 });
 
-// Express REST API
+// Create Express app
 const app = express();
 app.use(express.json());
 
 // CORS
-app.use((req, res, next) => {
+app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Mcp-Session-Id');
-  res.setHeader('Access-Control-Max-Age', '86400');
-
-  if (req.method === 'OPTIONS') {
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id');
+  res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
+  if (_req.method === 'OPTIONS') {
     res.sendStatus(200);
     return;
   }
   next();
 });
 
-// Error wrapper
-const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
-  (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-
 // Health check
-app.get('/health', asyncHandler(async (_req, res) => {
+app.get('/health', async (_req, res) => {
   const dbOk = await testConnection();
   res.json({
     status: dbOk ? 'healthy' : 'unhealthy',
     database: dbOk ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString(),
   });
-}));
+});
 
-// Context endpoints
-app.get('/context', asyncHandler(async (_req, res) => {
-  const entries = await getAllContext();
-  res.json(entries);
-}));
-
-app.get('/context/:key', asyncHandler(async (req, res) => {
-  const entry = await getContext(String(req.params.key));
-  if (!entry) {
-    res.status(404).json({ error: 'Context key not found' });
-    return;
-  }
-  res.json(entry);
-}));
-
-app.post('/context', asyncHandler(async (req, res) => {
-  const { key, value, updated_by } = req.body;
-  if (!key || value === undefined) {
-    res.status(400).json({ error: 'key and value are required' });
-    return;
-  }
-  const entry = await setContext({ key, value, updated_by });
-  res.status(201).json(entry);
-}));
-
-app.delete('/context/:key', asyncHandler(async (req, res) => {
-  const deleted = await deleteContext(String(req.params.key));
-  if (!deleted) {
-    res.status(404).json({ error: 'Context key not found' });
-    return;
-  }
-  res.status(204).send();
-}));
-
-// MCP SSE endpoints (exactly like Nebula)
-const transportMap = new Map<string, SSEServerTransport>();
-
-app.get('/mcp/sse', async (req, res) => {
-  console.log('MCP SSE connection from:', req.headers.origin || req.headers.referer || 'unknown');
-
-  const transport = new SSEServerTransport('/mcp/message', res);
-  const sessionId = transport.sessionId;
-
-  transport.onclose = () => {
-    transportMap.delete(sessionId);
-    console.log(`MCP transport ${sessionId} closed`);
-  };
-
-  transportMap.set(sessionId, transport);
-  console.log(`MCP transport ${sessionId} established`);
+// MCP endpoint - Stateless Streamable HTTP
+app.post('/mcp', async (req, res) => {
+  // Create a new transport for each request (stateless)
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // Stateless mode
+  });
 
   try {
+    // Connect server to transport
     await mcpServer.connect(transport);
-    console.log(`MCP transport ${sessionId} connected successfully`);
+
+    // Handle the request
+    await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error(`Failed to connect transport ${sessionId}:`, error);
-    transportMap.delete(sessionId);
-    throw error;
+    console.error('MCP request error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  } finally {
+    // Clean up
+    await transport.close();
   }
 });
 
-app.post('/mcp/message', express.json(), async (req, res) => {
-  const sessionId = req.query.sessionId as string;
-
-  if (!sessionId) {
-    res.status(400).json({ error: 'SessionId is required' });
-    return;
-  }
-
-  const transport = transportMap.get(sessionId);
-  if (!transport) {
-    res.status(404).json({ error: 'Session not found' });
-    return;
-  }
-
+// Legacy REST API endpoints
+app.get('/context', async (_req, res) => {
   try {
-    await transport.handlePostMessage(req, res, req.body);
+    const entries = await getAllContext();
+    res.json(entries);
   } catch (error) {
-    console.error('Error handling message:', error);
-    throw error;
+    console.error('Error fetching context:', error);
+    res.status(500).json({ error: 'Failed to fetch context' });
   }
 });
 
-// Error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+app.get('/context/:key', async (req, res) => {
+  try {
+    const entry = await getContext(String(req.params.key));
+    if (!entry) {
+      res.status(404).json({ error: 'Context key not found' });
+      return;
+    }
+    res.json(entry);
+  } catch (error) {
+    console.error('Error fetching context:', error);
+    res.status(500).json({ error: 'Failed to fetch context' });
+  }
+});
+
+app.post('/context', async (req, res) => {
+  try {
+    const { key, value, updated_by } = req.body;
+    const entry = await setContext({ key, value, updated_by });
+    res.json(entry);
+  } catch (error) {
+    console.error('Error setting context:', error);
+    res.status(500).json({ error: 'Failed to set context' });
+  }
+});
+
+app.delete('/context/:key', async (req, res) => {
+  try {
+    const deleted = await deleteContext(String(req.params.key));
+    if (!deleted) {
+      res.status(404).json({ error: 'Context key not found' });
+      return;
+    }
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting context:', error);
+    res.status(500).json({ error: 'Failed to delete context' });
+  }
 });
 
 // Start server
 app.listen(config.port, '0.0.0.0', async () => {
   console.log(`MCP Context Server running on port ${config.port}`);
-  console.log(`REST API: http://0.0.0.0:${config.port}`);
-  console.log(`MCP SSE: http://0.0.0.0:${config.port}/mcp/sse`);
+  console.log(`MCP Endpoint: http://0.0.0.0:${config.port}/mcp`);
   console.log(`Health: http://0.0.0.0:${config.port}/health`);
 
   const dbOk = await testConnection();
-  console.log(`Database: ${dbOk ? 'Connected ✓' : 'Disconnected ✗'}`);
+  console.log(`Database: ${dbOk ? 'Connected ✓' : 'Failed to connect ✗'}`);
 });

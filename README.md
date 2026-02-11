@@ -101,9 +101,9 @@ curl -X DELETE http://localhost:3118/context/my-key
 
 ### MCP Connection
 
-SSE endpoint: `http://localhost:3118/mcp/sse`
+MCP endpoint (Streamable HTTP): `http://localhost:3118/mcp`
 
-Or via domain: `https://mcp.knightsrook.com/mcp/sse`
+Or via domain: `https://mcp.knightsrook.com/mcp`
 
 ## Database
 
@@ -163,16 +163,14 @@ WantedBy=multi-user.target
 
 Nebula agents can also connect to this MCP server, but they're in a separate repo and can be developed/restarted without affecting MCP availability.
 
-## Troubleshooting
+## Implementation
 
-### Connection Issues
+**Transport:** Streamable HTTP (stateless mode)
+- Creates a new transport instance for each request
+- No session management or state tracking needed
+- Based on official MCP SDK examples
 
-**Sessions establishing but immediately closing:**
-- Check server logs: `pm2 logs mcp`
-- Added detailed logging and error handling to track connection lifecycle
-- Investigating "Already connected to a transport" errors with multiple simultaneous connections
-
-**Implementation Pattern:**
-- Uses single mcpServer instance shared across all connections (matches Nebula's proven pattern)
-- Each SSE connection gets its own Transport stored in transportMap
-- Added try-catch error handling around mcpServer.connect() calls
+**Pattern:**
+- Single MCP Server instance with request handlers
+- New StreamableHTTPServerTransport per request (stateless)
+- Proper cleanup with transport.close() after each request
