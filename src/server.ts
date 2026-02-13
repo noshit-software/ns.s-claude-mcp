@@ -120,7 +120,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             key: {
               type: 'string',
-              description: 'Unique topic key (e.g., "game-design:roguelike-mechanics")',
+              description: 'Topic key in format "project:name:aspect" (e.g., "project:xenogen:bga-status", "project:cortex:spec", "project:city-of-angels:design")',
             },
             value: {
               description: 'Topic content (summary, documentation, etc.)',
@@ -212,6 +212,11 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === 'save_topic') {
+    const key = args!.key as string;
+    const keyParts = key.split(':');
+    if (keyParts.length !== 3 || keyParts[0] !== 'project') {
+      throw new Error(`Invalid key format: "${key}". Keys must follow the pattern "project:name:aspect" (e.g., "project:xenogen:bga-status")`);
+    }
     const entry = await setContext({
       key: args!.key as string,
       value: args!.value,

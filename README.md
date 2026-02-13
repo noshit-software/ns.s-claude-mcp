@@ -58,6 +58,8 @@ pm2 start dist/server.js --name knightsrook-mcp
 
 The MCP server maintains a searchable knowledge base with metadata for cross-project pattern discovery.
 
+**Key format:** `project:name:aspect` (e.g., `project:xenogen:bga-status`, `project:cortex:spec`). Enforced on save.
+
 ### MCP Tools
 
 **search_topics** - Find topics by keyword, tags, category, or project
@@ -74,14 +76,14 @@ The MCP server maintains a searchable knowledge base with metadata for cross-pro
 **get_topic** - Retrieve a specific topic
 ```json
 {
-  "key": "game-design:roguelike-mechanics"
+  "key": "project:miskatonic-merge:mechanics"
 }
 ```
 
 **save_topic** - Save/update curated knowledge with metadata
 ```json
 {
-  "key": "game-design:roguelike-mechanics",
+  "key": "project:miskatonic-merge:mechanics",
   "value": "Detailed summary of conversation about roguelike mechanics...",
   "tags": ["game-design", "roguelike", "procedural-generation"],
   "category": "design",
