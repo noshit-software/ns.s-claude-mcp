@@ -230,8 +230,7 @@ Nebula agents can also connect to this MCP server, but they're in a separate rep
 - Based on official MCP SDK examples
 
 **Pattern:**
-- Single MCP Server instance with request handlers
-- New StreamableHTTPServerTransport per request (stateless)
-- Request queue serializes concurrent requests (server can only bind one transport at a time)
+- Fresh MCP Server instance created per request (true stateless — no shared state)
+- New StreamableHTTPServerTransport per request
 - Handles GET, POST, DELETE requests (required for Streamable HTTP)
-- Proper cleanup with transport.close() and mcpServer.close() after each request
+- Full cleanup after each request (transport.close + server.close)

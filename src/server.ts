@@ -17,241 +17,245 @@ import {
   searchContext,
 } from './context.js';
 
-// Create MCP Server
-const mcpServer = new Server(
-  {
-    name: 'Knightsrook Knowledge Base',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      resources: {},
-      tools: {},
+// Create a fresh MCP Server instance with all handlers registered
+function createMcpServer(): Server {
+  const server = new Server(
+    {
+      name: 'Knightsrook Knowledge Base',
+      version: '1.0.0',
     },
-  }
-);
-
-// MCP Resources
-mcpServer.setRequestHandler(ListResourcesRequestSchema, async () => {
-  return {
-    resources: [
-      {
-        uri: 'mcp://context',
-        name: 'All Context',
-        description: 'All stored context entries',
-        mimeType: 'application/json',
+    {
+      capabilities: {
+        resources: {},
+        tools: {},
       },
-    ],
-  };
-});
+    }
+  );
 
-mcpServer.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const uri = request.params.uri;
-
-  if (uri === 'mcp://context') {
-    const context = await getAllContext();
+  // MCP Resources
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
     return {
-      contents: [
+      resources: [
         {
-          uri,
+          uri: 'mcp://context',
+          name: 'All Context',
+          description: 'All stored context entries',
           mimeType: 'application/json',
-          text: JSON.stringify(context, null, 2),
         },
       ],
     };
-  }
+  });
 
-  throw new Error(`Unknown resource URI: ${uri}`);
-});
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params.uri;
 
-// MCP Tools
-mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: 'search_topics',
-        description: 'Search the Knightsrook knowledge base for curated topics. This is a persistent store of project specs, design decisions, and architectural notes shared across all Claude sessions. Use this FIRST to check what already exists before asking the user to re-explain something. Returns topic keys and metadata (use get_topic to fetch full content).',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Search keyword (searches in keys and values)',
-            },
-            tags: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Filter by tags (any tag matches)',
-            },
-            category: {
-              type: 'string',
-              description: 'Filter by category (architecture, design, etc.)',
-            },
-            project: {
-              type: 'string',
-              description: 'Filter by project name',
-            },
-            limit: {
-              type: 'number',
-              description: 'Maximum results to return (default: 50)',
-            },
+    if (uri === 'mcp://context') {
+      const context = await getAllContext();
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(context, null, 2),
           },
-        },
-      },
-      {
-        name: 'get_topic',
-        description: 'Retrieve the full content of a specific topic by key. Use search_topics first to find relevant keys.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            key: {
-              type: 'string',
-              description: 'Topic key',
-            },
-          },
-          required: ['key'],
-        },
-      },
-      {
-        name: 'save_topic',
-        description: 'Save or update a curated knowledge topic. Only save when the user explicitly asks to persist something to MCP. Always search first to check for existing entries to merge with rather than creating duplicates.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            key: {
-              type: 'string',
-              description: 'Topic key in format "project:name:aspect" (e.g., "project:xenogen:bga-status", "project:cortex:spec", "project:city-of-angels:design")',
-            },
-            value: {
-              description: 'Topic content (summary, documentation, etc.)',
-            },
-            tags: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Searchable keywords (e.g., ["game-design", "roguelike"])',
-            },
-            category: {
-              type: 'string',
-              description: 'Topic category (e.g., "architecture", "design")',
-            },
-            project: {
-              type: 'string',
-              description: 'Associated project name (e.g., "miskatonic-merge")',
-            },
-            updated_by: {
-              type: 'string',
-              description: 'Who is saving this (optional)',
-            },
-          },
-          required: ['key', 'value'],
-        },
-      },
-      {
-        name: 'delete_topic',
-        description: 'Delete a topic from the knowledge base. Only delete when explicitly asked by the user.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            key: {
-              type: 'string',
-              description: 'Topic key to delete',
-            },
-          },
-          required: ['key'],
-        },
-      },
-    ],
-  };
-});
-
-mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  if (name === 'search_topics') {
-    const results = await searchContext({
-      query: args!.query as string | undefined,
-      tags: args!.tags as string[] | undefined,
-      category: args!.category as string | undefined,
-      project: args!.project as string | undefined,
-      limit: (args!.limit as number | undefined) || 50,
-    });
-
-    // Return summary without full values for better performance
-    const summary = results.map(e => ({
-      key: e.key,
-      tags: e.tags,
-      category: e.category,
-      project: e.project,
-      updated_at: e.updated_at,
-      updated_by: e.updated_by,
-    }));
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Found ${results.length} topics:\n\n${JSON.stringify(summary, null, 2)}`,
-        },
-      ],
-    };
-  }
-
-  if (name === 'get_topic') {
-    const entry = await getContext(args!.key as string);
-    if (!entry) {
-      throw new Error(`Topic '${args!.key}' not found`);
+        ],
+      };
     }
+
+    throw new Error(`Unknown resource URI: ${uri}`);
+  });
+
+  // MCP Tools
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      content: [
+      tools: [
         {
-          type: 'text',
-          text: JSON.stringify(entry, null, 2),
+          name: 'search_topics',
+          description: 'Search the Knightsrook knowledge base for curated topics. This is a persistent store of project specs, design decisions, and architectural notes shared across all Claude sessions. Use this FIRST to check what already exists before asking the user to re-explain something. Returns topic keys and metadata (use get_topic to fetch full content).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search keyword (searches in keys and values)',
+              },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Filter by tags (any tag matches)',
+              },
+              category: {
+                type: 'string',
+                description: 'Filter by category (architecture, design, etc.)',
+              },
+              project: {
+                type: 'string',
+                description: 'Filter by project name',
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum results to return (default: 50)',
+              },
+            },
+          },
+        },
+        {
+          name: 'get_topic',
+          description: 'Retrieve the full content of a specific topic by key. Use search_topics first to find relevant keys.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              key: {
+                type: 'string',
+                description: 'Topic key',
+              },
+            },
+            required: ['key'],
+          },
+        },
+        {
+          name: 'save_topic',
+          description: 'Save or update a curated knowledge topic. Only save when the user explicitly asks to persist something to MCP. Always search first to check for existing entries to merge with rather than creating duplicates.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              key: {
+                type: 'string',
+                description: 'Topic key in format "project:name:aspect" (e.g., "project:xenogen:bga-status", "project:cortex:spec", "project:city-of-angels:design")',
+              },
+              value: {
+                description: 'Topic content (summary, documentation, etc.)',
+              },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Searchable keywords (e.g., ["game-design", "roguelike"])',
+              },
+              category: {
+                type: 'string',
+                description: 'Topic category (e.g., "architecture", "design")',
+              },
+              project: {
+                type: 'string',
+                description: 'Associated project name (e.g., "miskatonic-merge")',
+              },
+              updated_by: {
+                type: 'string',
+                description: 'Who is saving this (optional)',
+              },
+            },
+            required: ['key', 'value'],
+          },
+        },
+        {
+          name: 'delete_topic',
+          description: 'Delete a topic from the knowledge base. Only delete when explicitly asked by the user.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              key: {
+                type: 'string',
+                description: 'Topic key to delete',
+              },
+            },
+            required: ['key'],
+          },
         },
       ],
     };
-  }
+  });
 
-  if (name === 'save_topic') {
-    const key = args!.key as string;
-    const keyParts = key.split(':');
-    if (keyParts.length !== 3 || keyParts[0] !== 'project') {
-      throw new Error(`Invalid key format: "${key}". Keys must follow the pattern "project:name:aspect" (e.g., "project:xenogen:bga-status")`);
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    if (name === 'search_topics') {
+      const results = await searchContext({
+        query: args!.query as string | undefined,
+        tags: args!.tags as string[] | undefined,
+        category: args!.category as string | undefined,
+        project: args!.project as string | undefined,
+        limit: (args!.limit as number | undefined) || 50,
+      });
+
+      // Return summary without full values for better performance
+      const summary = results.map(e => ({
+        key: e.key,
+        tags: e.tags,
+        category: e.category,
+        project: e.project,
+        updated_at: e.updated_at,
+        updated_by: e.updated_by,
+      }));
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Found ${results.length} topics:\n\n${JSON.stringify(summary, null, 2)}`,
+          },
+        ],
+      };
     }
-    const entry = await setContext({
-      key: args!.key as string,
-      value: args!.value,
-      tags: args!.tags as string[] | undefined,
-      category: args!.category as string | undefined,
-      project: args!.project as string | undefined,
-      updated_by: args!.updated_by as string | undefined,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Topic '${entry.key}' saved successfully\n\n${JSON.stringify(entry, null, 2)}`,
-        },
-      ],
-    };
-  }
 
-  if (name === 'delete_topic') {
-    const deleted = await deleteContext(args!.key as string);
-    if (!deleted) {
-      throw new Error(`Topic '${args!.key}' not found`);
+    if (name === 'get_topic') {
+      const entry = await getContext(args!.key as string);
+      if (!entry) {
+        throw new Error(`Topic '${args!.key}' not found`);
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(entry, null, 2),
+          },
+        ],
+      };
     }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Topic '${args!.key}' deleted successfully`,
-        },
-      ],
-    };
-  }
 
-  throw new Error(`Unknown tool: ${name}`);
-});
+    if (name === 'save_topic') {
+      const key = args!.key as string;
+      const keyParts = key.split(':');
+      if (keyParts.length !== 3 || keyParts[0] !== 'project') {
+        throw new Error(`Invalid key format: "${key}". Keys must follow the pattern "project:name:aspect" (e.g., "project:xenogen:bga-status")`);
+      }
+      const entry = await setContext({
+        key: args!.key as string,
+        value: args!.value,
+        tags: args!.tags as string[] | undefined,
+        category: args!.category as string | undefined,
+        project: args!.project as string | undefined,
+        updated_by: args!.updated_by as string | undefined,
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Topic '${entry.key}' saved successfully\n\n${JSON.stringify(entry, null, 2)}`,
+          },
+        ],
+      };
+    }
+
+    if (name === 'delete_topic') {
+      const deleted = await deleteContext(args!.key as string);
+      if (!deleted) {
+        throw new Error(`Topic '${args!.key}' not found`);
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Topic '${args!.key}' deleted successfully`,
+          },
+        ],
+      };
+    }
+
+    throw new Error(`Unknown tool: ${name}`);
+  });
+
+  return server;
+}
 
 // Create Express app
 const app = express();
@@ -281,23 +285,15 @@ app.get('/health', async (_req, res) => {
 });
 
 // MCP endpoint - Stateless Streamable HTTP (handles GET, POST, DELETE)
-// Queue to serialize requests (mcpServer can only connect to one transport at a time)
-let requestQueue: Promise<void> = Promise.resolve();
-
+// Each request gets a fresh Server instance — no shared state, no lifecycle issues
 app.all('/mcp', async (req, res) => {
-  const pending = requestQueue;
-  let resolve: () => void;
-  requestQueue = new Promise<void>((r) => { resolve = r; });
-
-  // Wait for previous request to finish
-  await pending;
-
+  const server = createMcpServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode
   });
 
   try {
-    await mcpServer.connect(transport);
+    await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error('MCP request error:', error);
@@ -306,8 +302,7 @@ app.all('/mcp', async (req, res) => {
     }
   } finally {
     await transport.close();
-    await mcpServer.close();
-    resolve!();
+    await server.close();
   }
 });
 
