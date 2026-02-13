@@ -276,17 +276,23 @@ app.get('/health', async (_req, res) => {
 });
 
 // MCP endpoint - Stateless Streamable HTTP (handles GET, POST, DELETE)
+// Queue to serialize requests (mcpServer can only connect to one transport at a time)
+let requestQueue: Promise<void> = Promise.resolve();
+
 app.all('/mcp', async (req, res) => {
-  // Create a new transport for each request (stateless)
+  const pending = requestQueue;
+  let resolve: () => void;
+  requestQueue = new Promise<void>((r) => { resolve = r; });
+
+  // Wait for previous request to finish
+  await pending;
+
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode
   });
 
   try {
-    // Connect server to transport
     await mcpServer.connect(transport);
-
-    // Handle the request
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error('MCP request error:', error);
@@ -294,8 +300,9 @@ app.all('/mcp', async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   } finally {
-    // Clean up
     await transport.close();
+    await mcpServer.close();
+    resolve!();
   }
 });
 
