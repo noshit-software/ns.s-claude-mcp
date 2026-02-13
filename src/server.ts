@@ -20,7 +20,7 @@ import {
 // Create MCP Server
 const mcpServer = new Server(
   {
-    name: 'knightsrook-mcp',
+    name: 'Knightsrook Knowledge Base',
     version: '1.0.0',
   },
   {
@@ -70,7 +70,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'search_topics',
-        description: 'Search topics by keyword, tags, category, or project',
+        description: 'Search the Knightsrook knowledge base for curated topics. This is a persistent store of project specs, design decisions, and architectural notes shared across all Claude sessions. Use this FIRST to check what already exists before asking the user to re-explain something. Returns topic keys and metadata (use get_topic to fetch full content).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -100,7 +100,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'get_topic',
-        description: 'Retrieve a specific topic by key',
+        description: 'Retrieve the full content of a specific topic by key. Use search_topics first to find relevant keys.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -114,7 +114,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'save_topic',
-        description: 'Save or update a curated knowledge topic with metadata',
+        description: 'Save or update a curated knowledge topic. Only save when the user explicitly asks to persist something to MCP. Always search first to check for existing entries to merge with rather than creating duplicates.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -148,7 +148,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'delete_topic',
-        description: 'Delete a topic from the knowledge base',
+        description: 'Delete a topic from the knowledge base. Only delete when explicitly asked by the user.',
         inputSchema: {
           type: 'object',
           properties: {

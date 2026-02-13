@@ -56,7 +56,7 @@ pm2 start dist/server.js --name knightsrook-mcp
 
 ### Curated Knowledge Base
 
-The MCP server maintains a searchable knowledge base with metadata for cross-project pattern discovery.
+The MCP server maintains a searchable knowledge base with metadata for cross-project pattern discovery. Tool descriptions are self-documenting so Claude instances learn conventions (key format, search-before-save, explicit-only writes) directly from the tool listing.
 
 **Key format:** `project:name:aspect` (e.g., `project:xenogen:bga-status`, `project:cortex:spec`). Enforced on save.
 
