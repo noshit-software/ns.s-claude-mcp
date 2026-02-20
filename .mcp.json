@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "knightsrook": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.knightsrook.com/mcp"]
+    }
+  }
+}

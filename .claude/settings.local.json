@@ -9,7 +9,11 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "WebFetch(domain:mcp.knightsrook.com)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "mcp__knightsrook__get_topic",
+      "mcp__knightsrook__save_topic",
+      "mcp__knightsrook__search_topics"
     ]
   }
 }
