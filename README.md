@@ -1,195 +1,200 @@
-# Knightsrook MCP
+# Claude MCP Server
 
-Universal context store - long-term memory for all Claude instances.
+A ready-to-deploy MCP server that gives Claude persistent memory across all your conversations.
 
-## What This Is
+**What it does:** Claude can save, search, and retrieve information that survives across sessions. Works with Claude.ai (web), Claude mobile, Claude Desktop, and Claude Code -- all reading from the same database.
 
-A standalone MCP (Model Context Protocol) server that provides persistent key-value storage accessible from any Claude instance (mobile, web, desktop, Claude Code).
+**What MCP is:** Model Context Protocol. It's how you give Claude access to external tools and data. This server exposes tools over HTTP that Claude can call during conversations.
 
-**Separated from Nebula** to ensure:
-- Always-on data access even during Nebula development
-- Protected from accidental changes during agent development
-- Clean, stable, minimal codebase focused only on data storage
+```
+┌─────────────────┐
+│  Claude Web     │──┐
+└─────────────────┘  │
+┌─────────────────┐  │    ┌──────────────┐    ┌───────────┐
+│  Claude Mobile  │──┼───>│  MCP Server  │───>│   MySQL   │
+└─────────────────┘  │    │  (Express)   │    │           │
+┌─────────────────┐  │    └──────────────┘    └───────────┘
+│  Claude Desktop │──┤
+└─────────────────┘  │
+┌─────────────────┐  │
+│  Claude Code    │──┘
+└─────────────────┘
+```
+
+---
+
+## Prerequisites
+
+You need three things installed:
+
+| Tool | Why | Install |
+|------|-----|---------|
+| **Node.js** (v18+) | Runs the server | [nodejs.org](https://nodejs.org) -- use the LTS version |
+| **npm** | Installs packages | Comes with Node.js |
+| **MySQL** (5.7+) | Stores the data | [dev.mysql.com/downloads](https://dev.mysql.com/downloads/mysql/) |
+
+Already have these? Move on.
+
+---
 
 ## Setup
 
-1. **Install dependencies:**
+### Option A: Automated (recommended)
+
 ```bash
+git clone <repo-url> && cd knightsrook-mcp
+bash scripts/setup.sh
+```
+
+The script walks you through everything: installs dependencies, creates your `.env`, sets up the database, and builds the project. Follow the prompts.
+
+### Option B: Manual
+
+**1. Clone and install**
+
+```bash
+git clone <repo-url>
+cd knightsrook-mcp
 npm install
 ```
 
-2. **Create `.env` file:**
+**2. Create your `.env` file**
+
 ```bash
 cp .env.example .env
-# Edit .env with your database credentials
 ```
 
-3. **Create database:**
+Open `.env` and fill in your MySQL credentials:
+
+```env
+PORT=3118
+
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=knightsrook_mcp
+DB_PASSWORD=your_password_here
+DB_NAME=knightsrook_mcp
+```
+
+**3. Create the database**
+
+Pick one:
+
 ```bash
+# If you have MySQL root access (creates the database + user for you):
+npm run setup-root <your_mysql_root_password>
+
+# If the database and user already exist:
 npm run setup-db
 ```
 
-4. **Migrate existing context data** (if you have data from Nebula):
-```bash
-# Using the migrate script (migrates from local to remote based on .env)
-npm run migrate <root_password>
+**4. Build**
 
-# Or manually with mysqldump
-mysqldump -u knightsrook_nebula -p knightsrook_nebula context > context_backup.sql
-mysql -u knightsrook_mcp -p knightsrook_mcp < context_backup.sql
+```bash
+npm run build
 ```
 
-5. **Run the server:**
+**5. Start the server**
+
 ```bash
-# Development
+# Development (auto-reloads on changes):
 npm run dev
 
-# Production
-npm run build
+# Production:
 npm start
-
-# Or with PM2
-pm2 start dist/server.js --name knightsrook-mcp
 ```
 
-## Usage
-
-### Curated Knowledge Base
-
-The MCP server maintains a searchable knowledge base with metadata for cross-project pattern discovery. Tool descriptions are self-documenting so Claude instances learn conventions (key format, search-before-save, explicit-only writes) directly from the tool listing.
-
-**Key format:** `project:name:aspect` (e.g., `project:xenogen:bga-status`, `project:cortex:spec`). Enforced on save.
-
-### MCP Tools
-
-**search_topics** - Find topics by keyword, tags, category, or project
-```json
-{
-  "query": "game-design",           // Optional: search keyword
-  "tags": ["roguelike", "combat"],  // Optional: filter by tags
-  "category": "architecture",       // Optional: filter by category
-  "project": "miskatonic-merge",    // Optional: filter by project
-  "limit": 50                       // Optional: max results (default: 50)
-}
-```
-
-**get_topic** - Retrieve a specific topic
-```json
-{
-  "key": "project:miskatonic-merge:mechanics"
-}
-```
-
-**save_topic** - Save/update curated knowledge with metadata
-```json
-{
-  "key": "project:miskatonic-merge:mechanics",
-  "value": "Detailed summary of conversation about roguelike mechanics...",
-  "tags": ["game-design", "roguelike", "procedural-generation"],
-  "category": "design",
-  "project": "miskatonic-merge",
-  "updated_by": "user"
-}
-```
-
-**delete_topic** - Remove a topic
-```json
-{
-  "key": "game-design:roguelike-mechanics"
-}
-```
-
-### Workflow
-
-1. **During conversation**: When you say "save to MCP", Claude creates a summary
-2. **Review**: You review the summary and metadata (tags, category, project)
-3. **Check for duplicates**: Claude searches for existing related topics
-4. **Save or merge**: If topic exists, merge content; otherwise create new entry
-5. **Cross-project discovery**: Search by tags to find patterns across projects
-
-### REST API
+**6. Verify it works**
 
 ```bash
-# Health check
-curl http://localhost:3118/health
-
-# Get all context
-curl http://localhost:3118/context
-
-# Get specific key
-curl http://localhost:3118/context/my-key
-
-# Set value
-curl -X POST http://localhost:3118/context \
-  -H "Content-Type: application/json" \
-  -d '{"key":"my-key","value":{"data":"here"}}'
-
-# Delete key
-curl -X DELETE http://localhost:3118/context/my-key
+bash scripts/health-check.sh
 ```
 
-### MCP Connection
+Or manually:
 
-MCP endpoint: `https://mcp.knightsrook.com/mcp`
+```bash
+curl http://localhost:3118/health
+```
 
-**Claude.ai Web:**
-1. Go to Settings → Connectors → Browse connectors
-2. Add custom connector with URL: `https://mcp.knightsrook.com/mcp`
+You should see:
+```json
+{"status":"healthy","database":"connected","timestamp":"..."}
+```
 
-**Claude Mobile:**
-1. Settings → Connectors
-2. Add custom connector: `https://mcp.knightsrook.com/mcp`
+---
 
-**Claude Desktop:**
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+## Connect Claude to Your Server
+
+Your MCP endpoint is: `http://localhost:3118/mcp`
+
+If you deployed to a server with a domain, it would be something like: `https://mcp.yourdomain.com/mcp`
+
+### Claude.ai (Web)
+
+1. Go to **Settings** (click your profile picture)
+2. Click **Connectors**
+3. Click **Add custom connector**
+4. Paste your MCP URL
+
+### Claude Mobile
+
+1. Open **Settings**
+2. Tap **Connectors**
+3. Tap **Add custom connector**
+4. Paste your MCP URL
+
+### Claude Desktop
+
+Edit your Claude Desktop config file:
+
+| OS | File location |
+|----|---------------|
+| Mac | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+Add this:
+
 ```json
 {
   "mcpServers": {
     "knightsrook-mcp": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.knightsrook.com/mcp"]
+      "args": ["mcp-remote", "https://mcp.yourdomain.com/mcp"]
     }
   }
 }
 ```
 
-**Claude Code:**
-Claude Code currently supports remote MCP servers the same way as Claude Desktop. Add to your global MCP configuration or use the connectors UI.
+Replace the URL with your actual MCP endpoint.
 
-## Database
+### Claude Code
 
-Single table schema in `knightsrook_mcp` database:
+Same config as Claude Desktop. Add to your global MCP settings or use the connectors UI.
 
-```sql
-CREATE TABLE context (
-  `key` VARCHAR(255) PRIMARY KEY,
-  value JSON,
-  tags JSON DEFAULT NULL,
-  category VARCHAR(100) DEFAULT NULL,
-  project VARCHAR(100) DEFAULT NULL,
-  updated_by VARCHAR(50),
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_category (category),
-  INDEX idx_project (project),
-  INDEX idx_updated_at (updated_at)
-);
-```
+---
 
-**Migration:** To upgrade from old schema, run `npm run migrate-schema` which adds metadata columns and indexes. Compatible with MySQL 5.7+.
+## Deploying to Production
 
-## Deployment
+The server is just a Node.js Express app. Deploy it however you deploy Node apps.
 
-**PM2:**
+### With PM2 (process manager)
+
 ```bash
+npm install -g pm2
 npm run build
-pm2 start dist/server.js --name knightsrook-mcp
+pm2 start dist/server.js --name mcp-server
 pm2 save
+pm2 startup    # auto-start on reboot
 ```
 
-**Systemd:** (create `/etc/systemd/system/knightsrook-mcp.service`)
+### With systemd (Linux)
+
+Create `/etc/systemd/system/mcp-server.service`:
+
 ```ini
 [Unit]
-Description=Knightsrook MCP Context Server
+Description=Claude MCP Server
 After=network.target mysql.service
 
 [Service]
@@ -204,33 +209,91 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
-## Architecture
+Then:
 
-```
-┌─────────────────┐
-│  Claude Mobile  │──┐
-└─────────────────┘  │
-                     │
-┌─────────────────┐  │    ┌──────────────┐    ┌───────────┐
-│  Claude Web     │──┼───▶│  MCP Server  │───▶│   MySQL   │
-└─────────────────┘  │    │  (Port 3118) │    │  Context  │
-                     │    └──────────────┘    └───────────┘
-┌─────────────────┐  │
-│  Claude Code    │──┘
-└─────────────────┘
+```bash
+sudo systemctl enable mcp-server
+sudo systemctl start mcp-server
 ```
 
-Nebula agents can also connect to this MCP server, but they're in a separate repo and can be developed/restarted without affecting MCP availability.
+### Reverse Proxy (nginx)
 
-## Implementation
+If you want to put it behind a domain with HTTPS:
 
-**Transport:** Streamable HTTP (stateless mode)
-- Creates a new transport instance for each request
-- No session management or state tracking needed
-- Based on official MCP SDK examples
+```nginx
+server {
+    listen 443 ssl;
+    server_name mcp.yourdomain.com;
 
-**Pattern:**
-- Fresh MCP Server instance created per request (true stateless — no shared state)
-- New StreamableHTTPServerTransport per request
-- Handles GET, POST, DELETE requests (required for Streamable HTTP)
-- Full cleanup after each request (transport.close + server.close)
+    ssl_certificate     /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3118;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+---
+
+## What Claude Gets
+
+Once connected, Claude has four tools:
+
+| Tool | What it does |
+|------|-------------|
+| `search_topics` | Search the knowledge base by keyword, tags, category, or project |
+| `get_topic` | Get the full content of a specific entry |
+| `save_topic` | Save or update an entry (keys must follow `project:name:aspect` format) |
+| `delete_topic` | Remove an entry |
+
+You don't need to memorize these. Claude sees the tool descriptions automatically and knows how to use them.
+
+**How you use it in practice:** Just tell Claude "save this to MCP" or "check MCP for..." and it handles the rest.
+
+---
+
+## Project Structure
+
+```
+├── src/
+│   ├── server.ts          # MCP server + Express app (the main file)
+│   ├── config.ts           # Reads .env
+│   ├── db.ts               # MySQL connection pool
+│   ├── context.ts          # Database operations (CRUD + search)
+│   ├── setup-db.ts         # Creates database and table
+│   ├── setup-root.ts       # Same but with MySQL root access
+│   ├── migrate-schema.ts   # Upgrades table schema
+│   └── migrate-context.ts  # Migrates data from another database
+├── scripts/
+│   ├── setup.sh            # Automated setup wizard
+│   └── health-check.sh     # Verify server is running
+├── .env.example            # Template for your .env
+├── package.json
+└── tsconfig.json
+```
+
+---
+
+## Troubleshooting
+
+**"Database connection failed"**
+- Is MySQL running? (`sudo systemctl status mysql` on Linux, check Services on Windows)
+- Are the credentials in `.env` correct?
+- Can you connect manually? `mysql -u knightsrook_mcp -p knightsrook_mcp`
+
+**"Cannot find module" errors**
+- Run `npm run build` before `npm start`
+- Or use `npm run dev` which doesn't need a build step
+
+**Server starts but Claude can't connect**
+- Is the server reachable from the internet? `localhost` only works on your machine
+- Check firewall rules for your port (default 3118)
+- For remote access, you need a domain or public IP + reverse proxy with HTTPS
+
+**Claude doesn't show the tools**
+- Wait a few seconds after adding the connector -- Claude needs to fetch the tool list
+- Check the health endpoint to make sure the server is actually running
+- Try disconnecting and reconnecting the connector in Claude's settings
