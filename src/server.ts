@@ -8,7 +8,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { config } from './config.js';
-import { testConnection } from './db.js';
+import { testConnection, testM2tConnection } from './db.js';
 import {
   getAllContext,
   getContext,
@@ -364,4 +364,9 @@ app.listen(config.port, '0.0.0.0', async () => {
 
   const dbOk = await testConnection();
   console.log(`Database: ${dbOk ? 'Connected ✓' : 'Failed to connect ✗'}`);
+
+  if (config.m2t.enabled) {
+    const m2tOk = await testM2tConnection();
+    console.log(`m2t sync: ${m2tOk ? 'Connected ✓' : 'Failed to connect ✗'} (codex ${config.m2t.codexId})`);
+  }
 });

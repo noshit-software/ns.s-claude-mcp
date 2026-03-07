@@ -1,4 +1,5 @@
-import { pool } from './db.js';
+import { pool, m2tPool } from './db.js';
+import { config } from './config.js';
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 export interface ContextEntry {
@@ -54,6 +55,10 @@ export async function setContext(entry: {
       entry.updated_by || null
     ]
   );
+
+  // Dual-write to memory2thought
+  syncToM2t(entry).catch(err => console.error('[m2t sync] save failed:', err.message));
+
   return (await getContext(entry.key))!;
 }
 
@@ -62,6 +67,10 @@ export async function deleteContext(key: string): Promise<boolean> {
     'DELETE FROM context WHERE `key` = ?',
     [key]
   );
+
+  // Dual-delete from memory2thought
+  deleteFromM2t(key).catch(err => console.error('[m2t sync] delete failed:', err.message));
+
   return result.affectedRows > 0;
 }
 
@@ -112,4 +121,44 @@ export async function searchContext(params: {
 
   const [rows] = await pool.query<RowDataPacket[]>(query, values);
   return rows as ContextEntry[];
+}
+
+// ── memory2thought dual-write ───────────────────────────────────────
+
+async function syncToM2t(entry: {
+  key: string;
+  value: unknown;
+  tags?: string[];
+  category?: string;
+}): Promise<void> {
+  if (!m2tPool || !config.m2t.codexId) return;
+
+  const valueStr = typeof entry.value === 'string'
+    ? entry.value
+    : JSON.stringify(entry.value);
+
+  await m2tPool.query(
+    `INSERT INTO topics (codex_id, topic_key, value, category, tags)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       value = VALUES(value),
+       category = VALUES(category),
+       tags = VALUES(tags)`,
+    [
+      config.m2t.codexId,
+      entry.key,
+      valueStr,
+      entry.category || null,
+      entry.tags ? JSON.stringify(entry.tags) : null,
+    ]
+  );
+}
+
+async function deleteFromM2t(key: string): Promise<void> {
+  if (!m2tPool || !config.m2t.codexId) return;
+
+  await m2tPool.query(
+    'DELETE FROM topics WHERE codex_id = ? AND topic_key = ?',
+    [config.m2t.codexId, key]
+  );
 }
