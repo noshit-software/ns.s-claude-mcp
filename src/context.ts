@@ -132,24 +132,43 @@ function parseCodexName(key: string): string {
   return parts.length >= 2 ? parts[1] : parts[0];
 }
 
-// Find or create a codex by name for the configured user
+// Find or create a codex by name for the configured user.
+// Fuzzy match: normalizes hyphens/spaces/case so "ds-translator" matches
+// "DS Translator", "ds translator", etc. Falls back to creating if no match.
 async function resolveCodexId(codexName: string): Promise<number> {
   if (!m2tPool || !config.m2t.clerkUserId) return 0;
 
+  // Normalize: lowercase, replace hyphens+underscores with spaces, trim
+  const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, ' ').trim();
+  const normalized = normalize(codexName);
+
+  // Fetch all user's codices and match in JS for full flexibility
   const [rows] = await m2tPool.query<RowDataPacket[]>(
-    'SELECT id FROM codices WHERE clerk_user_id = ? AND name = ?',
-    [config.m2t.clerkUserId, codexName]
+    'SELECT id, name FROM codices WHERE clerk_user_id = ?',
+    [config.m2t.clerkUserId]
   );
 
-  if (rows.length > 0) return rows[0].id;
+  // Exact normalized match first
+  const exact = rows.find(r => normalize(r.name) === normalized);
+  if (exact) return exact.id;
 
-  // Create it
+  // Substring match: codex name contains the key segment or vice versa
+  const fuzzy = rows.find(r =>
+    normalize(r.name).includes(normalized) || normalized.includes(normalize(r.name))
+  );
+  if (fuzzy) {
+    console.log(`[m2t sync] fuzzy matched "${codexName}" → codex "${fuzzy.name}" (id=${fuzzy.id})`);
+    return fuzzy.id;
+  }
+
+  // No match — create a new codex with a readable name
+  const readable = codexName.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const [result] = await m2tPool.query<ResultSetHeader>(
     'INSERT INTO codices (clerk_user_id, name) VALUES (?, ?)',
-    [config.m2t.clerkUserId, codexName]
+    [config.m2t.clerkUserId, readable]
   );
 
-  console.log(`[m2t sync] created codex "${codexName}" (id=${result.insertId})`);
+  console.log(`[m2t sync] created codex "${readable}" (id=${result.insertId})`);
   return result.insertId;
 }
 
