@@ -367,6 +367,6 @@ app.listen(config.port, '0.0.0.0', async () => {
 
   if (config.m2t.enabled) {
     const m2tOk = await testM2tConnection();
-    console.log(`m2t sync: ${m2tOk ? 'Connected ✓' : 'Failed to connect ✗'} (codex ${config.m2t.codexId})`);
+    console.log(`m2t sync: ${m2tOk ? 'Connected ✓' : 'Failed to connect ✗'} (user ${config.m2t.clerkUserId})`);
   }
 });

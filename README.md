@@ -4,7 +4,7 @@ A ready-to-deploy MCP server that gives Claude persistent memory across all your
 
 **What it does:** Claude can save, search, and retrieve information that survives across sessions. Works with Claude.ai (web), Claude mobile, Claude Desktop, and Claude Code -- all reading from the same database.
 
-**memory2thought dual-write:** When `M2T_DB_*` env vars are configured, every save/delete is mirrored to a memory2thought Codex, letting Claude Code and the m2t chat UI share a single knowledge store.
+**memory2thought dual-write:** When `M2T_DB_*` and `M2T_CLERK_USER_ID` env vars are configured, every save/delete is mirrored to a memory2thought Codex. Topic keys are parsed (`type:name:subject`) and the `name` segment determines which Codex receives the topic — codices are auto-created if they don't exist.
 
 **What MCP is:** Model Context Protocol. It's how you give Claude access to external tools and data. This server exposes tools over HTTP that Claude can call during conversations.
 

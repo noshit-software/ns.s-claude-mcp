@@ -125,13 +125,45 @@ export async function searchContext(params: {
 
 // ── memory2thought dual-write ───────────────────────────────────────
 
+// Parse type:name:subject key → codex name is the "name" segment
+function parseCodexName(key: string): string {
+  const parts = key.split(':');
+  // type:name:subject → name; type:name → name; bare-key → bare-key
+  return parts.length >= 2 ? parts[1] : parts[0];
+}
+
+// Find or create a codex by name for the configured user
+async function resolveCodexId(codexName: string): Promise<number> {
+  if (!m2tPool || !config.m2t.clerkUserId) return 0;
+
+  const [rows] = await m2tPool.query<RowDataPacket[]>(
+    'SELECT id FROM codices WHERE clerk_user_id = ? AND name = ?',
+    [config.m2t.clerkUserId, codexName]
+  );
+
+  if (rows.length > 0) return rows[0].id;
+
+  // Create it
+  const [result] = await m2tPool.query<ResultSetHeader>(
+    'INSERT INTO codices (clerk_user_id, name) VALUES (?, ?)',
+    [config.m2t.clerkUserId, codexName]
+  );
+
+  console.log(`[m2t sync] created codex "${codexName}" (id=${result.insertId})`);
+  return result.insertId;
+}
+
 async function syncToM2t(entry: {
   key: string;
   value: unknown;
   tags?: string[];
   category?: string;
 }): Promise<void> {
-  if (!m2tPool || !config.m2t.codexId) return;
+  if (!m2tPool || !config.m2t.clerkUserId) return;
+
+  const codexName = parseCodexName(entry.key);
+  const codexId = await resolveCodexId(codexName);
+  if (!codexId) return;
 
   const valueStr = typeof entry.value === 'string'
     ? entry.value
@@ -145,7 +177,7 @@ async function syncToM2t(entry: {
        category = VALUES(category),
        tags = VALUES(tags)`,
     [
-      config.m2t.codexId,
+      codexId,
       entry.key,
       valueStr,
       entry.category || null,
@@ -155,10 +187,14 @@ async function syncToM2t(entry: {
 }
 
 async function deleteFromM2t(key: string): Promise<void> {
-  if (!m2tPool || !config.m2t.codexId) return;
+  if (!m2tPool || !config.m2t.clerkUserId) return;
+
+  const codexName = parseCodexName(key);
+  const codexId = await resolveCodexId(codexName);
+  if (!codexId) return;
 
   await m2tPool.query(
     'DELETE FROM topics WHERE codex_id = ? AND topic_key = ?',
-    [config.m2t.codexId, key]
+    [codexId, key]
   );
 }

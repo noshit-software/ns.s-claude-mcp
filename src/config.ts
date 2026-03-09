@@ -13,7 +13,7 @@ export const config = {
   },
   m2t: {
     enabled: !!process.env.M2T_DB_HOST,
-    codexId: parseInt(process.env.M2T_CODEX_ID || '0', 10),
+    clerkUserId: process.env.M2T_CLERK_USER_ID || '',
     db: {
       host: process.env.M2T_DB_HOST || '',
       port: parseInt(process.env.M2T_DB_PORT || '3306', 10),
