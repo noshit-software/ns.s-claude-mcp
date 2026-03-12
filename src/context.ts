@@ -133,36 +133,77 @@ function parseCodexName(key: string): string {
 }
 
 // Find or create a codex by name for the configured user.
-// Fuzzy match: normalizes hyphens/spaces/case so "ds-translator" matches
-// "DS Translator", "ds translator", etc. Falls back to creating if no match.
+// Multi-level fuzzy match: exact → substring → word overlap → topic key names.
+// Strips org prefixes (e.g. "knightsrook-") before matching.
 async function resolveCodexId(codexName: string): Promise<number> {
   if (!m2tPool || !config.m2t.clerkUserId) return 0;
 
-  // Normalize: lowercase, replace hyphens+underscores with spaces, trim
   const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, ' ').trim();
-  const normalized = normalize(codexName);
+  const toWords = (s: string) => normalize(s).split(/\s+/).filter(w => w.length >= 2);
+  // Strip org prefix — workspace names often start with "knightsrook-"
+  const stripPrefix = (s: string) => s.replace(/^knightsrook[\s-_]+/i, '');
 
-  // Fetch all user's codices and match in JS for full flexibility
+  const normalized = normalize(codexName);
+  const stripped = normalize(stripPrefix(codexName));
+  const incomingWords = toWords(stripPrefix(codexName));
+
   const [rows] = await m2tPool.query<RowDataPacket[]>(
     'SELECT id, name FROM codices WHERE clerk_user_id = ?',
     [config.m2t.clerkUserId]
   );
 
-  // Exact normalized match first
-  const exact = rows.find(r => normalize(r.name) === normalized);
+  // 1. Exact normalized match
+  const exact = rows.find(r => normalize(r.name) === normalized || normalize(r.name) === stripped);
   if (exact) return exact.id;
 
-  // Substring match: codex name contains the key segment or vice versa
-  const fuzzy = rows.find(r =>
-    normalize(r.name).includes(normalized) || normalized.includes(normalize(r.name))
-  );
-  if (fuzzy) {
-    console.log(`[m2t sync] fuzzy matched "${codexName}" → codex "${fuzzy.name}" (id=${fuzzy.id})`);
-    return fuzzy.id;
+  // 2. Substring match (with and without prefix)
+  const substr = rows.find(r => {
+    const n = normalize(r.name);
+    return n.includes(normalized) || normalized.includes(n)
+      || n.includes(stripped) || stripped.includes(n);
+  });
+  if (substr) {
+    console.log(`[m2t sync] fuzzy matched "${codexName}" → codex "${substr.name}" (id=${substr.id})`);
+    return substr.id;
   }
 
-  // No match — create a new codex with a readable name
-  const readable = codexName.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  // 3. Word overlap: if >50% of codex name words appear in incoming (or vice versa)
+  let bestMatch: { id: number; name: string } | null = null;
+  let bestScore = 0;
+  for (const r of rows) {
+    const codexWords = toWords(r.name);
+    if (codexWords.length === 0) continue;
+    const overlap = codexWords.filter(w => incomingWords.includes(w)).length;
+    const score = overlap / codexWords.length;
+    if (score > bestScore && score >= 0.5) {
+      bestScore = score;
+      bestMatch = r;
+    }
+  }
+  if (bestMatch) {
+    console.log(`[m2t sync] word-matched "${codexName}" → codex "${bestMatch.name}" (id=${bestMatch.id}, score=${bestScore})`);
+    return bestMatch.id;
+  }
+
+  // 4. Match against existing topic key name segments in each codex
+  const [topicRows] = await m2tPool.query<RowDataPacket[]>(
+    `SELECT DISTINCT codex_id, SUBSTRING_INDEX(SUBSTRING_INDEX(topic_key, ':', 2), ':', -1) AS key_name
+     FROM topics WHERE codex_id IN (${rows.map(() => '?').join(',')})`,
+    rows.map(r => r.id)
+  );
+  for (const tr of topicRows) {
+    const keyName = normalize(tr.key_name);
+    if (stripped.includes(keyName) || keyName.includes(stripped)) {
+      const codex = rows.find(r => r.id === tr.codex_id);
+      if (codex) {
+        console.log(`[m2t sync] key-matched "${codexName}" → codex "${codex.name}" via key name "${tr.key_name}" (id=${codex.id})`);
+        return codex.id;
+      }
+    }
+  }
+
+  // No match — create a new codex with a readable name (stripped of org prefix)
+  const readable = stripPrefix(codexName).replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const [result] = await m2tPool.query<ResultSetHeader>(
     'INSERT INTO codices (clerk_user_id, name) VALUES (?, ?)',
     [config.m2t.clerkUserId, readable]
@@ -177,7 +218,7 @@ async function syncToM2t(entry: {
   value: unknown;
   tags?: string[];
   category?: string;
-}): Promise<void> {
+}, retry = true): Promise<void> {
   if (!m2tPool || !config.m2t.clerkUserId) return;
 
   const codexName = parseCodexName(entry.key);
@@ -188,32 +229,49 @@ async function syncToM2t(entry: {
     ? entry.value
     : JSON.stringify(entry.value);
 
-  await m2tPool.query(
-    `INSERT INTO topics (codex_id, topic_key, value, category, tags)
-     VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       value = VALUES(value),
-       category = VALUES(category),
-       tags = VALUES(tags)`,
-    [
-      codexId,
-      entry.key,
-      valueStr,
-      entry.category || null,
-      entry.tags ? JSON.stringify(entry.tags) : null,
-    ]
-  );
+  try {
+    await m2tPool.query(
+      `INSERT INTO topics (codex_id, topic_key, value, category, tags)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         value = VALUES(value),
+         category = VALUES(category),
+         tags = VALUES(tags)`,
+      [
+        codexId,
+        entry.key,
+        valueStr,
+        entry.category || null,
+        entry.tags ? JSON.stringify(entry.tags) : null,
+      ]
+    );
+  } catch (err: any) {
+    // Retry once on connection errors (stale pool after Railway drops idle connections)
+    if (retry && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ETIMEDOUT')) {
+      console.warn(`[m2t sync] connection lost, retrying: ${err.code}`);
+      return syncToM2t(entry, false);
+    }
+    throw err;
+  }
 }
 
-async function deleteFromM2t(key: string): Promise<void> {
+async function deleteFromM2t(key: string, retry = true): Promise<void> {
   if (!m2tPool || !config.m2t.clerkUserId) return;
 
   const codexName = parseCodexName(key);
   const codexId = await resolveCodexId(codexName);
   if (!codexId) return;
 
-  await m2tPool.query(
-    'DELETE FROM topics WHERE codex_id = ? AND topic_key = ?',
-    [codexId, key]
-  );
+  try {
+    await m2tPool.query(
+      'DELETE FROM topics WHERE codex_id = ? AND topic_key = ?',
+      [codexId, key]
+    );
+  } catch (err: any) {
+    if (retry && (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ETIMEDOUT')) {
+      console.warn(`[m2t sync] connection lost, retrying delete: ${err.code}`);
+      return deleteFromM2t(key, false);
+    }
+    throw err;
+  }
 }

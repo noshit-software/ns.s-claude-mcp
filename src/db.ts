@@ -13,6 +13,7 @@ export const pool = mysql.createPool({
 });
 
 // memory2thought dual-write pool (optional — only if M2T_DB_HOST is configured)
+// Railway's proxy drops idle connections — enableKeepAlive prevents stale pool.
 export const m2tPool = config.m2t.enabled
   ? mysql.createPool({
       host: config.m2t.db.host,
@@ -23,6 +24,9 @@ export const m2tPool = config.m2t.enabled
       waitForConnections: true,
       connectionLimit: 5,
       queueLimit: 0,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 30000,
+      idleTimeout: 60000,
     })
   : null;
 
