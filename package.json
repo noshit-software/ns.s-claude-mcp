@@ -11,7 +11,8 @@
     "setup-db": "tsx src/setup-db.ts",
     "setup-root": "tsx src/setup-root.ts",
     "migrate": "tsx src/migrate-context.ts",
-    "migrate-schema": "tsx src/migrate-schema.ts"
+    "migrate-schema": "tsx src/migrate-schema.ts",
+    "migrate-soft-delete": "tsx src/migrate-soft-delete.ts"
   },
   "keywords": ["mcp", "context", "memory"],
   "author": "",

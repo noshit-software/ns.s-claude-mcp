@@ -1,0 +1,119 @@
+import crypto from 'crypto';
+import type { Request, Response, NextFunction } from 'express';
+
+export type Scope = 'read' | 'write' | null;
+
+const TOOL_SCOPES: Record<string, 'read' | 'write'> = {
+  search_topics: 'read',
+  get_topic: 'read',
+  save_topic: 'write',
+  delete_topic: 'write',
+};
+
+function sha256(input: string): Buffer {
+  return crypto.createHash('sha256').update(input, 'utf8').digest();
+}
+
+function parseTokenList(raw: string | undefined): Buffer[] {
+  return (raw || '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map(sha256);
+}
+
+const rwDigests = parseTokenList(process.env.KRK_MCP_TOKENS_RW);
+const roDigests = parseTokenList(process.env.KRK_MCP_TOKENS_RO);
+
+if (rwDigests.length === 0) {
+  console.error('FATAL: KRK_MCP_TOKENS_RW is unset or empty. Refusing to start with no write credential configured.');
+  process.exit(1);
+}
+
+function constantTimeIncludes(digests: Buffer[], candidate: Buffer): boolean {
+  let found = false;
+  for (const d of digests) {
+    if (d.length === candidate.length && crypto.timingSafeEqual(d, candidate)) {
+      found = true;
+    }
+  }
+  return found;
+}
+
+function resolveScope(token: string): Scope {
+  const digest = sha256(token);
+  if (constantTimeIncludes(rwDigests, digest)) return 'write';
+  if (constantTimeIncludes(roDigests, digest)) return 'read';
+  return null;
+}
+
+function redactToken(token: string | undefined): string {
+  if (!token) return 'none';
+  return token.slice(0, 8) + '...';
+}
+
+function sendAuthError(res: Response, status: 401 | 403, code: number, message: string) {
+  if (status === 401) {
+    res.setHeader('WWW-Authenticate', 'Bearer realm="knightsrook-mcp"');
+  }
+  res.status(status).json({
+    jsonrpc: '2.0',
+    error: { code, message },
+    id: null,
+  });
+}
+
+export interface AuthedRequest extends Request {
+  scope?: Scope;
+}
+
+// Transport-layer middleware: rejects requests with no/unrecognized token
+// before any JSON-RPC parsing happens.
+export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  const header = req.header('authorization');
+  const match = header && /^Bearer\s+(.+)$/i.exec(header.trim());
+
+  if (!header || !match) {
+    console.warn(`[auth] rejected: no/malformed Authorization header, method=${req.method}, ip=${req.ip}, token=${redactToken(undefined)}`);
+    sendAuthError(res, 401, -32001, 'Authentication required');
+    return;
+  }
+
+  const token = match[1];
+  const scope = resolveScope(token);
+
+  if (!scope) {
+    console.warn(`[auth] rejected: invalid token, method=${req.method}, ip=${req.ip}, token=${redactToken(token)}`);
+    sendAuthError(res, 401, -32001, 'Invalid credentials');
+    return;
+  }
+
+  req.scope = scope;
+  next();
+}
+
+export function scopeForTool(toolName: string): 'read' | 'write' | undefined {
+  return TOOL_SCOPES[toolName];
+}
+
+export function hasScope(granted: Scope, required: 'read' | 'write'): boolean {
+  if (!granted) return false;
+  if (granted === 'write') return true;
+  return required === 'read';
+}
+
+export function toolsVisibleForScope(scope: Scope): Set<string> {
+  const visible = new Set<string>();
+  for (const [name, required] of Object.entries(TOOL_SCOPES)) {
+    if (hasScope(scope, required)) visible.add(name);
+  }
+  return visible;
+}
+
+export function sendScopeError(res: Response, toolName: string) {
+  sendAuthError(res, 403, -32002, `Insufficient scope for tool: ${toolName}`);
+}
+
+export function logAttribution(action: 'save_topic' | 'delete_topic', key: string, token: string) {
+  console.log(`[audit] ${action} key="${key}" token=...${token.slice(-4)}`);
+}

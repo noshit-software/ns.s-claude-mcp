@@ -2,7 +2,12 @@
   "mcpServers": {
     "knightsrook": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.knightsrook.com/mcp"]
+      "args": [
+        "mcp-remote",
+        "https://mcp.knightsrook.com/mcp",
+        "--header",
+        "Authorization: Bearer ${KRK_MCP_TOKEN}"
+      ]
     }
   }
 }

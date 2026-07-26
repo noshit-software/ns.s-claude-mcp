@@ -16,9 +16,20 @@ import {
   deleteContext,
   searchContext,
 } from './context.js';
+import {
+  requireAuth,
+  scopeForTool,
+  hasScope,
+  toolsVisibleForScope,
+  sendScopeError,
+  logAttribution,
+  type AuthedRequest,
+  type Scope,
+} from './auth.js';
 
-// Create a fresh MCP Server instance with all handlers registered
-function createMcpServer(): Server {
+// Create a fresh MCP Server instance with all handlers registered, scoped
+// to what the presented token is allowed to see and do.
+function createMcpServer(scope: Scope, token: string): Server {
   const server = new Server(
     {
       name: 'Knightsrook Knowledge Base',
@@ -67,6 +78,7 @@ function createMcpServer(): Server {
 
   // MCP Tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const visible = toolsVisibleForScope(scope);
     return {
       tools: [
         {
@@ -161,12 +173,17 @@ function createMcpServer(): Server {
             required: ['key'],
           },
         },
-      ],
+      ].filter((tool) => visible.has(tool.name)),
     };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+
+    const required = scopeForTool(name);
+    if (required && !hasScope(scope, required)) {
+      throw new Error(`Insufficient scope for tool: ${name}`);
+    }
 
     if (name === 'search_topics') {
       const results = await searchContext({
@@ -226,6 +243,7 @@ function createMcpServer(): Server {
         project: args!.project as string | undefined,
         updated_by: args!.updated_by as string | undefined,
       });
+      logAttribution('save_topic', entry.key, token);
       return {
         content: [
           {
@@ -241,6 +259,7 @@ function createMcpServer(): Server {
       if (!deleted) {
         throw new Error(`Topic '${args!.key}' not found`);
       }
+      logAttribution('delete_topic', args!.key as string, token);
       return {
         content: [
           {
@@ -265,7 +284,7 @@ app.use(express.json());
 app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, Authorization');
   res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
   if (_req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -274,20 +293,57 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Health check
+// Health check — no credential required, but keep the response minimal.
+// Backend liveness (e.g. a "database" field) is free reconnaissance for
+// an anonymous caller and isn't needed for uptime monitoring.
 app.get('/health', async (_req, res) => {
-  const dbOk = await testConnection();
-  res.json({
-    status: dbOk ? 'healthy' : 'unhealthy',
-    database: dbOk ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString(),
-  });
+  res.json({ status: 'healthy' });
 });
+
+// Basic in-memory rate limit on /mcp, keyed by IP, applied before auth so
+// credential-guessing gets throttled rather than just failing fast.
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 60;
+const rateLimitHits = new Map<string, { count: number; windowStart: number }>();
+
+function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const entry = rateLimitHits.get(ip);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    rateLimitHits.set(ip, { count: 1, windowStart: now });
+    next();
+    return;
+  }
+
+  entry.count += 1;
+  if (entry.count > RATE_LIMIT_MAX) {
+    res.status(429).json({ error: 'Too many requests' });
+    return;
+  }
+  next();
+}
 
 // MCP endpoint - Stateless Streamable HTTP (handles GET, POST, DELETE)
 // Each request gets a fresh Server instance — no shared state, no lifecycle issues
-app.all('/mcp', async (req, res) => {
-  const server = createMcpServer();
+app.all('/mcp', rateLimit, requireAuth, async (req: AuthedRequest, res) => {
+  // Enforce scope on tools/call before it reaches the SDK transport, so a
+  // scope violation surfaces as a real HTTP 403 rather than an in-band
+  // JSON-RPC error the caller could confuse with an empty result.
+  const body = req.body;
+  if (body && body.method === 'tools/call') {
+    const toolName = body.params?.name;
+    const required = toolName ? scopeForTool(toolName) : undefined;
+    if (required && !hasScope(req.scope ?? null, required)) {
+      sendScopeError(res, toolName);
+      return;
+    }
+  }
+
+  const header = req.header('authorization') || '';
+  const token = (/^Bearer\s+(.+)$/i.exec(header.trim()) || [])[1] || '';
+  const server = createMcpServer(req.scope ?? null, token);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode
   });

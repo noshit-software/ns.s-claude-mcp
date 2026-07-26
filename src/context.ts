@@ -13,13 +13,15 @@ export interface ContextEntry {
 }
 
 export async function getAllContext(): Promise<ContextEntry[]> {
-  const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM context ORDER BY updated_at DESC');
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM context WHERE deleted_at IS NULL ORDER BY updated_at DESC'
+  );
   return rows as ContextEntry[];
 }
 
 export async function getContext(key: string): Promise<ContextEntry | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT * FROM context WHERE `key` = ?',
+    'SELECT * FROM context WHERE `key` = ? AND deleted_at IS NULL',
     [key]
   );
   if (!rows[0]) return null;
@@ -37,6 +39,7 @@ export async function setContext(entry: {
   project?: string;
   updated_by?: string;
 }): Promise<ContextEntry> {
+  // A re-save of a previously soft-deleted key resurrects it.
   await pool.query(
     `INSERT INTO context (\`key\`, value, tags, category, project, updated_by)
      VALUES (?, ?, ?, ?, ?, ?)
@@ -45,7 +48,8 @@ export async function setContext(entry: {
        tags = VALUES(tags),
        category = VALUES(category),
        project = VALUES(project),
-       updated_by = VALUES(updated_by)`,
+       updated_by = VALUES(updated_by),
+       deleted_at = NULL`,
     [
       entry.key,
       JSON.stringify(entry.value),
@@ -63,8 +67,10 @@ export async function setContext(entry: {
 }
 
 export async function deleteContext(key: string): Promise<boolean> {
+  // Soft delete — irreversible deletion via a single tool call is not an
+  // acceptable design given what's stored here, auth or no auth.
   const [result] = await pool.query<ResultSetHeader>(
-    'DELETE FROM context WHERE `key` = ?',
+    'UPDATE context SET deleted_at = CURRENT_TIMESTAMP WHERE `key` = ? AND deleted_at IS NULL',
     [key]
   );
 
@@ -81,7 +87,7 @@ export async function searchContext(params: {
   project?: string;
   limit?: number;
 }): Promise<ContextEntry[]> {
-  const conditions: string[] = [];
+  const conditions: string[] = ['deleted_at IS NULL'];
   const values: any[] = [];
 
   // Search in key or value
