@@ -16,7 +16,9 @@ Clients that can't set a custom header (e.g. some remote-MCP connector UIs) may 
 
 For a client using `mcp-remote` (see `.mcp.json`), set `KRK_MCP_TOKEN` in the environment the client launches from — `npx mcp-remote` substitutes it into the `--header` flag.
 
-`delete_topic` is a soft delete (`deleted_at` column) — deleted rows are excluded from reads but recoverable directly in the database. Run `npm run migrate-soft-delete` once against an existing database to add the column.
+`delete_topic` is a soft delete (`deleted_at` column) — deleted rows are excluded from reads but recoverable directly in the database. Run `npm run migrate-soft-delete` once against an existing database to add the column. `npm run setup-db` / `npm run setup-root` create fresh installs with this column already in place.
+
+All setup/migration scripts (`setup-db`, `setup-root`, `migrate`, `migrate-schema`, `migrate-soft-delete`) read credentials from `.env` only — none has a hardcoded fallback password. Set `DB_PASSWORD` before running any of them.
 
 ## Scripts
 

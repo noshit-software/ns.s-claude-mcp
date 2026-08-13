@@ -12,7 +12,12 @@ async function migrateContext() {
     process.exit(1);
   }
 
-  const remoteHost = process.env.DB_HOST || '5.78.186.35';
+  const remoteHost = process.env.DB_HOST;
+  const remotePassword = process.env.DB_PASSWORD;
+  if (!remoteHost || !remotePassword) {
+    console.error('DB_HOST and DB_PASSWORD must be set in .env before running this script.');
+    process.exit(1);
+  }
 
   // Connect to source database (knightsrook_nebula on localhost)
   console.log('Connecting to source database (knightsrook_nebula on localhost)...');
@@ -30,7 +35,7 @@ async function migrateContext() {
     host: remoteHost,
     port: 3306,
     user: process.env.DB_USER || 'knightsrook_mcp',
-    password: process.env.DB_PASSWORD || 'Octanemedia1!',
+    password: remotePassword,
     database: 'knightsrook_mcp',
   });
 

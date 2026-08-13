@@ -25,6 +25,7 @@ function parseTokenList(raw: string | undefined): Buffer[] {
 const rwDigests = parseTokenList(process.env.KRK_MCP_TOKENS_RW);
 const roDigests = parseTokenList(process.env.KRK_MCP_TOKENS_RO);
 
+// @pattern:env-fail-fast
 if (rwDigests.length === 0) {
   console.error('FATAL: KRK_MCP_TOKENS_RW is unset or empty. Refusing to start with no write credential configured.');
   process.exit(1);

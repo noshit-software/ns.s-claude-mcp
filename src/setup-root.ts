@@ -16,8 +16,13 @@ async function setupAsRoot() {
 
   const dbName = process.env.DB_NAME || 'knightsrook_mcp';
   const dbUser = process.env.DB_USER || 'knightsrook_mcp';
-  const dbPassword = process.env.DB_PASSWORD || 'Octanemedia1!';
+  const dbPassword = process.env.DB_PASSWORD;
   const dbHost = process.env.DB_HOST || 'localhost';
+
+  if (!dbPassword) {
+    console.error('DB_PASSWORD is not set. Set it in .env before running this script.');
+    process.exit(1);
+  }
 
   // Connect as root
   const connection = await mysql.createConnection({
@@ -59,9 +64,11 @@ async function setupAsRoot() {
       project VARCHAR(100) DEFAULT NULL,
       updated_by VARCHAR(50),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP NULL DEFAULT NULL,
       INDEX idx_category (category),
       INDEX idx_project (project),
-      INDEX idx_updated_at (updated_at)
+      INDEX idx_updated_at (updated_at),
+      INDEX idx_deleted_at (deleted_at)
     )
   `);
 

@@ -30,9 +30,11 @@ async function setup() {
       project VARCHAR(100) DEFAULT NULL,
       updated_by VARCHAR(50),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP NULL DEFAULT NULL,
       INDEX idx_category (category),
       INDEX idx_project (project),
-      INDEX idx_updated_at (updated_at)
+      INDEX idx_updated_at (updated_at),
+      INDEX idx_deleted_at (deleted_at)
     )
   `);
 
