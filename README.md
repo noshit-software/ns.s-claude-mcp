@@ -20,6 +20,8 @@ For a client using `mcp-remote` (see `.mcp.json`), set `KRK_MCP_TOKEN` in the en
 
 All setup/migration scripts (`setup-db`, `setup-root`, `migrate`, `migrate-schema`, `migrate-soft-delete`) read credentials from `.env` only — none has a hardcoded fallback password. Set `DB_PASSWORD` before running any of them.
 
+`search_topics`'s `limit` argument is a tool's `inputSchema` type hint, not enforced server-side by the MCP SDK — the server clamps it to an integer between 1 and 500 itself before it reaches the query, rather than trusting the wire payload.
+
 ## Scripts
 
 - `scripts/backfill-m2t.cjs` — Backfill MCP topics into memory2thought DB (CommonJS)

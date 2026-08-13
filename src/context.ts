@@ -115,8 +115,15 @@ export async function searchContext(params: {
     values.push(params.project);
   }
 
+  // params.limit arrives as unchecked JSON-RPC input (the tool's inputSchema
+  // is advisory only — the server must validate it). Coerce to a safe
+  // integer before it goes anywhere near string interpolation.
+  const safeLimit = Number.isInteger(params.limit) && (params.limit as number) > 0
+    ? Math.min(params.limit as number, 500)
+    : undefined;
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limitClause = params.limit ? `LIMIT ${params.limit}` : '';
+  const limitClause = safeLimit ? `LIMIT ${safeLimit}` : '';
 
   const query = `
     SELECT * FROM context
