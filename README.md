@@ -2,6 +2,19 @@
 
 MCP context server for persistent cross-session knowledge. Deployed on VPS at mcp.knightsrook.com. Dual-writes to memory2thought Railway DB with fuzzy codex resolution and connection keepalive.
 
+## Tools
+
+Exposed at `/mcp`, gated by scope (see Auth below):
+
+| Tool | Scope | Purpose |
+|---|---|---|
+| `search_topics` | read | Search by keyword, tags, category, or project |
+| `get_topic` | read | Fetch a topic's full content by key |
+| `save_topic` | write | Create or update a topic |
+| `delete_topic` | write | Soft-delete a topic |
+
+Full input schemas live in `src/server.ts`.
+
 ## Auth
 
 Every `/mcp` request requires a bearer token:
@@ -21,6 +34,8 @@ For a client using `mcp-remote` (see `.mcp.json`), set `KRK_MCP_TOKEN` in the en
 All setup/migration scripts (`setup-db`, `setup-root`, `migrate`, `migrate-schema`, `migrate-soft-delete`) read credentials from `.env` only — none has a hardcoded fallback password. Set `DB_PASSWORD` before running any of them.
 
 `search_topics`'s `limit` argument is a tool's `inputSchema` type hint, not enforced server-side by the MCP SDK — the server clamps it to an integer between 1 and 500 itself before it reaches the query, rather than trusting the wire payload.
+
+**Known gap:** `server.ts` also exposes legacy REST endpoints (`GET/POST /context`, `GET/DELETE /context/:key`) that predate the `/mcp` auth work above and have no auth on them at all — full anonymous read/write/delete. Flagged for a removal decision, not yet acted on.
 
 ## Scripts
 
