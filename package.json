@@ -12,9 +12,14 @@
     "setup-root": "tsx src/setup-root.ts",
     "migrate": "tsx src/migrate-context.ts",
     "migrate-schema": "tsx src/migrate-schema.ts",
-    "migrate-soft-delete": "tsx src/migrate-soft-delete.ts"
+    "migrate-soft-delete": "tsx src/migrate-soft-delete.ts",
+    "test": "vitest run"
   },
-  "keywords": ["mcp", "context", "memory"],
+  "keywords": [
+    "mcp",
+    "context",
+    "memory"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -29,6 +34,7 @@
     "@types/node": "^22.10.5",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
   }
 }

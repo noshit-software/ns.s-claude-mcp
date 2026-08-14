@@ -181,7 +181,7 @@ async function resolveCodexId(codexName: string): Promise<number> {
   }
 
   // 3. Word overlap: if >50% of codex name words appear in incoming (or vice versa)
-  let bestMatch: { id: number; name: string } | null = null;
+  let bestMatch: RowDataPacket | null = null;
   let bestScore = 0;
   for (const r of rows) {
     const codexWords = toWords(r.name);

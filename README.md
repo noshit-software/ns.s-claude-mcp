@@ -27,3 +27,10 @@ All setup/migration scripts (`setup-db`, `setup-root`, `migrate`, `migrate-schem
 - `scripts/backfill-m2t.cjs` — Backfill MCP topics into memory2thought DB (CommonJS)
 - `scripts/backfill-m2t.js` — Backfill MCP topics into memory2thought DB (ESM)
 - `npm run migrate-soft-delete` — Adds the `deleted_at` column for soft-delete support (one-time, idempotent)
+- `npm test` — Runs the Vitest suite (`src/auth.test.ts`, `src/context.test.ts`)
+
+## Tests
+
+Vitest covers the security-sensitive logic: token/scope resolution and fail-closed startup in `auth.ts`, and query construction (soft-delete filtering, parameterization, the `limit` clamp) in `context.ts`. The DB pool and MCP transport are not covered — no integration tests against a live server yet.
+
+`npm test` runs in CI on every push/PR (`.github/workflows/ci.yml`) alongside `tsc --noEmit`. It also runs from the local pre-commit hook whenever a commit touches `.ts`/`.js` files.
