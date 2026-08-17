@@ -18,6 +18,7 @@ import {
 } from './context.js';
 import {
   requireAuth,
+  extractToken,
   scopeForTool,
   hasScope,
   toolsVisibleForScope,
@@ -327,7 +328,7 @@ function rateLimit(req: express.Request, res: express.Response, next: express.Ne
 
 // MCP endpoint - Stateless Streamable HTTP (handles GET, POST, DELETE)
 // Each request gets a fresh Server instance — no shared state, no lifecycle issues
-app.all('/mcp', rateLimit, requireAuth, async (req: AuthedRequest, res) => {
+async function handleMcp(req: AuthedRequest, res: express.Response) {
   // Enforce scope on tools/call before it reaches the SDK transport, so a
   // scope violation surfaces as a real HTTP 403 rather than an in-band
   // JSON-RPC error the caller could confuse with an empty result.
@@ -341,8 +342,7 @@ app.all('/mcp', rateLimit, requireAuth, async (req: AuthedRequest, res) => {
     }
   }
 
-  const header = req.header('authorization') || '';
-  const token = (/^Bearer\s+(.+)$/i.exec(header.trim()) || [])[1] || '';
+  const token = extractToken(req) || '';
   const server = createMcpServer(req.scope ?? null, token);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode
@@ -360,7 +360,16 @@ app.all('/mcp', rateLimit, requireAuth, async (req: AuthedRequest, res) => {
     await transport.close();
     await server.close();
   }
-});
+}
+
+app.all('/mcp', rateLimit, requireAuth, handleMcp);
+
+// Path-token variant for clients that can't set a custom Authorization
+// header (some remote-MCP connector UIs only accept a bare URL). The
+// token still goes through the same constant-time scope resolution as
+// the header — it's just read from the URL instead. Tradeoff: a token
+// in the URL can land in server/proxy access logs, unlike a header.
+app.all('/mcp/:token', rateLimit, requireAuth, handleMcp);
 
 // Start server
 app.listen(config.port, '0.0.0.0', async () => {

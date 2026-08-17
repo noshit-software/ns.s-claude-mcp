@@ -68,19 +68,29 @@ export interface AuthedRequest extends Request {
   scope?: Scope;
 }
 
+// Pulls a bearer token from the standard Authorization header, or — for
+// clients that can't set custom headers (some remote-MCP connector UIs
+// only support a bare URL) — from a /mcp/:token path segment. The header
+// is preferred when both are present.
+export function extractToken(req: Request): string | undefined {
+  const header = req.header('authorization');
+  const match = header && /^Bearer\s+(.+)$/i.exec(header.trim());
+  if (match) return match[1];
+  const pathToken = req.params?.token;
+  return typeof pathToken === 'string' ? pathToken : undefined;
+}
+
 // Transport-layer middleware: rejects requests with no/unrecognized token
 // before any JSON-RPC parsing happens.
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
-  const header = req.header('authorization');
-  const match = header && /^Bearer\s+(.+)$/i.exec(header.trim());
+  const token = extractToken(req);
 
-  if (!header || !match) {
-    console.warn(`[auth] rejected: no/malformed Authorization header, method=${req.method}, ip=${req.ip}, token=${redactToken(undefined)}`);
+  if (!token) {
+    console.warn(`[auth] rejected: no credential, method=${req.method}, ip=${req.ip}, token=${redactToken(undefined)}`);
     sendAuthError(res, 401, -32001, 'Authentication required');
     return;
   }
 
-  const token = match[1];
   const scope = resolveScope(token);
 
   if (!scope) {

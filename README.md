@@ -25,9 +25,9 @@ Authorization: Bearer krk_...
 
 Tokens are configured via `KRK_MCP_TOKENS_RW` / `KRK_MCP_TOKENS_RO` (comma-separated, see `.env.example`). A write token implicitly grants read. The process refuses to start if `KRK_MCP_TOKENS_RW` is unset. `tools/list` is filtered by scope, and `save_topic`/`delete_topic` return HTTP 403 for a read-only token.
 
-Clients that can't set a custom header (e.g. some remote-MCP connector UIs) may need OAuth discovery or a network-level restriction instead — a static bearer token isn't universally supported by every MCP client.
-
 For a client using `mcp-remote` (see `.mcp.json`), set `KRK_MCP_TOKEN` in the environment the client launches from — `npx mcp-remote` substitutes it into the `--header` flag.
+
+Clients that can't set a custom header at all (some remote-MCP connector UIs — e.g. claude.ai's, which only takes a bare URL) can instead use the token as a URL path segment: `https://mcp.knightsrook.com/mcp/<token>`. Same scope resolution, same constant-time comparison, just read from the path instead of the header — the header is checked first and wins if both are present. Tradeoff: a token in the URL can end up in server/proxy access logs, unlike a header. Prefer the header wherever a client supports it.
 
 `delete_topic` is a soft delete (`deleted_at` column) — deleted rows are excluded from reads but recoverable directly in the database. Run `npm run migrate-soft-delete` once against an existing database to add the column. `npm run setup-db` / `npm run setup-root` create fresh installs with this column already in place.
 
