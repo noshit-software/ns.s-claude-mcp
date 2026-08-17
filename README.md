@@ -35,8 +35,6 @@ All setup/migration scripts (`setup-db`, `setup-root`, `migrate`, `migrate-schem
 
 `search_topics`'s `limit` argument is a tool's `inputSchema` type hint, not enforced server-side by the MCP SDK — the server clamps it to an integer between 1 and 500 itself before it reaches the query, rather than trusting the wire payload.
 
-**Known gap:** `server.ts` also exposes legacy REST endpoints (`GET/POST /context`, `GET/DELETE /context/:key`) that predate the `/mcp` auth work above and have no auth on them at all — full anonymous read/write/delete. Flagged for a removal decision, not yet acted on.
-
 ## Scripts
 
 - `scripts/backfill-m2t.cjs` — Backfill MCP topics into memory2thought DB (CommonJS)

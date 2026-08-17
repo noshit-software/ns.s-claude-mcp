@@ -362,56 +362,6 @@ app.all('/mcp', rateLimit, requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
-// Legacy REST API endpoints
-app.get('/context', async (_req, res) => {
-  try {
-    const entries = await getAllContext();
-    res.json(entries);
-  } catch (error) {
-    console.error('Error fetching context:', error);
-    res.status(500).json({ error: 'Failed to fetch context' });
-  }
-});
-
-app.get('/context/:key', async (req, res) => {
-  try {
-    const entry = await getContext(String(req.params.key));
-    if (!entry) {
-      res.status(404).json({ error: 'Context key not found' });
-      return;
-    }
-    res.json(entry);
-  } catch (error) {
-    console.error('Error fetching context:', error);
-    res.status(500).json({ error: 'Failed to fetch context' });
-  }
-});
-
-app.post('/context', async (req, res) => {
-  try {
-    const { key, value, updated_by } = req.body;
-    const entry = await setContext({ key, value, updated_by });
-    res.json(entry);
-  } catch (error) {
-    console.error('Error setting context:', error);
-    res.status(500).json({ error: 'Failed to set context' });
-  }
-});
-
-app.delete('/context/:key', async (req, res) => {
-  try {
-    const deleted = await deleteContext(String(req.params.key));
-    if (!deleted) {
-      res.status(404).json({ error: 'Context key not found' });
-      return;
-    }
-    res.status(204).send();
-  } catch (error) {
-    console.error('Error deleting context:', error);
-    res.status(500).json({ error: 'Failed to delete context' });
-  }
-});
-
 // Start server
 app.listen(config.port, '0.0.0.0', async () => {
   console.log(`MCP Context Server running on port ${config.port}`);
