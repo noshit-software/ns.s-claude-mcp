@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
+import { config } from './config.js';
 
 export type Scope = 'read' | 'write' | null;
 
@@ -41,7 +42,11 @@ function constantTimeIncludes(digests: Buffer[], candidate: Buffer): boolean {
   return found;
 }
 
-function resolveScope(token: string): Scope {
+// Exported so the OAuth login page (oauth.ts) can validate a pasted token
+// with the exact same logic used for header/path auth — the OAuth flow
+// only ever issues one of these same static tokens back as the access
+// token, it never mints anything new.
+export function resolveScope(token: string): Scope {
   const digest = sha256(token);
   if (constantTimeIncludes(rwDigests, digest)) return 'write';
   if (constantTimeIncludes(roDigests, digest)) return 'read';
@@ -55,7 +60,11 @@ function redactToken(token: string | undefined): string {
 
 function sendAuthError(res: Response, status: 401 | 403, code: number, message: string) {
   if (status === 401) {
-    res.setHeader('WWW-Authenticate', 'Bearer realm="knightsrook-mcp"');
+    // resource_metadata (RFC 9728 / MCP 2025-06-18 auth spec) lets a
+    // spec-compliant client auto-discover the OAuth flow from a bare 401,
+    // instead of needing a human to hand-configure a token anywhere.
+    const metadataUrl = `${config.publicUrl}/.well-known/oauth-protected-resource/mcp`;
+    res.setHeader('WWW-Authenticate', `Bearer realm="knightsrook-mcp", resource_metadata="${metadataUrl}"`);
   }
   res.status(status).json({
     jsonrpc: '2.0',

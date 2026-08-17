@@ -4,6 +4,7 @@ dotenv.config();
 
 export const config = {
   port: parseInt(process.env.PORT || '3118', 10),
+  publicUrl: process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || '3118'}`,
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '3306', 10),

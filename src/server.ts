@@ -1,6 +1,7 @@
 import express from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -27,6 +28,7 @@ import {
   type AuthedRequest,
   type Scope,
 } from './auth.js';
+import { KrkOAuthProvider, handleApprove } from './oauth.js';
 
 // Create a fresh MCP Server instance with all handlers registered, scoped
 // to what the presented token is allowed to see and do.
@@ -280,6 +282,7 @@ function createMcpServer(scope: Scope, token: string): Server {
 // Create Express app
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // for the OAuth login form POST
 
 // CORS
 app.use((_req, res, next) => {
@@ -292,6 +295,31 @@ app.use((_req, res, next) => {
     return;
   }
   next();
+});
+
+// OAuth 2.1 authorization server — installs discovery metadata, dynamic
+// client registration, /authorize, /token, and revocation. Exists only so
+// clients that can't set a custom header (e.g. the claude.ai connector,
+// which is OAuth-only) can still obtain one of the same static
+// KRK_MCP_TOKENS_* values that header/path auth already accepts — see
+// oauth.ts for why this issues existing tokens rather than minting new ones.
+const oauthProvider = new KrkOAuthProvider();
+app.use(
+  mcpAuthRouter({
+    provider: oauthProvider,
+    issuerUrl: new URL(config.publicUrl),
+    resourceServerUrl: new URL('/mcp', config.publicUrl),
+    scopesSupported: ['read', 'write'],
+    resourceName: 'Knightsrook Knowledge Base',
+  })
+);
+
+// The SDK's authorize handler renders provider.authorize()'s response
+// directly (our login form); this route handles that form's POST-back,
+// which is intentionally outside the SDK router since it isn't part of
+// the OAuth wire protocol itself.
+app.post('/oauth/authorize/approve', (req, res) => {
+  handleApprove(req.body, res);
 });
 
 // Health check — no credential required, but keep the response minimal.

@@ -35,15 +35,26 @@ All setup/migration scripts (`setup-db`, `setup-root`, `migrate`, `migrate-schem
 
 `search_topics`'s `limit` argument is a tool's `inputSchema` type hint, not enforced server-side by the MCP SDK — the server clamps it to an integer between 1 and 500 itself before it reaches the query, rather than trusting the wire payload.
 
+## OAuth
+
+Some remote-MCP connector UIs (claude.ai's, notably) don't offer a header or URL field for a static credential at all — they only support OAuth 2.1 with dynamic client registration, and attempt that handshake automatically the moment you add a connector URL. For those, this server runs a minimal OAuth authorization server (`@modelcontextprotocol/sdk`'s `mcpAuthRouter`, backed by `src/oauth.ts`) at the same origin as `/mcp`.
+
+It doesn't mint its own opaque tokens — "logging in" via the OAuth flow just means pasting one of your existing `KRK_MCP_TOKENS_*` values into a plain login form, and the access token handed back to the client *is* that same string. It flows into the exact same header-based auth check every other client uses. There's no separate token store to keep in sync, no expiry to manage.
+
+Flow: connector hits `/register` (dynamic client registration, persisted in the `oauth_clients` table so it survives a restart) → `/authorize` (renders the login form) → user pastes a token → `/oauth/authorize/approve` issues a short-lived (5 min) authorization code and redirects back to the connector → connector exchanges it at `/token` (PKCE-verified by the SDK) → gets the pasted token back as `access_token`.
+
+Setup: run `npm run migrate-oauth` once to create the `oauth_clients` table, and set `PUBLIC_URL` in `.env` to the real public HTTPS origin (used to build the discovery/issuer URLs clients fetch from `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource/mcp`).
+
 ## Scripts
 
 - `scripts/backfill-m2t.cjs` — Backfill MCP topics into memory2thought DB (CommonJS)
 - `scripts/backfill-m2t.js` — Backfill MCP topics into memory2thought DB (ESM)
 - `npm run migrate-soft-delete` — Adds the `deleted_at` column for soft-delete support (one-time, idempotent)
-- `npm test` — Runs the Vitest suite (`src/auth.test.ts`, `src/context.test.ts`)
+- `npm run migrate-oauth` — Creates the `oauth_clients` table for dynamic client registration (one-time, idempotent)
+- `npm test` — Runs the Vitest suite (`src/auth.test.ts`, `src/context.test.ts`, `src/oauth.test.ts`)
 
 ## Tests
 
-Vitest covers the security-sensitive logic: token/scope resolution and fail-closed startup in `auth.ts`, and query construction (soft-delete filtering, parameterization, the `limit` clamp) in `context.ts`. The DB pool and MCP transport are not covered — no integration tests against a live server yet.
+Vitest covers the security-sensitive logic: token/scope resolution and fail-closed startup in `auth.ts`, query construction (soft-delete filtering, parameterization, the `limit` clamp) in `context.ts`, and the OAuth login page (XSS escaping, invalid/insufficient-scope token rejection, cross-client code redemption) in `oauth.ts`. The DB pool and MCP transport are not covered — no integration tests against a live server yet, though the full OAuth flow (register → authorize → approve → token exchange → authenticated `/mcp` call) has been manually verified end-to-end against a local MySQL instance.
 
 `npm test` runs in CI on every push/PR (`.github/workflows/ci.yml`) alongside `tsc --noEmit`. It also runs from the local pre-commit hook whenever a commit touches `.ts`/`.js` files.

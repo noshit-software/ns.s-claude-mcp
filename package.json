@@ -13,6 +13,7 @@
     "migrate": "tsx src/migrate-context.ts",
     "migrate-schema": "tsx src/migrate-schema.ts",
     "migrate-soft-delete": "tsx src/migrate-soft-delete.ts",
+    "migrate-oauth": "tsx src/migrate-oauth.ts",
     "test": "vitest run"
   },
   "keywords": [
